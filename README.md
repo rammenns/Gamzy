@@ -24,12 +24,14 @@ Check the **Releases** section and download the installer from there. Installing
 
 ## The project sctructure
 
-FreeGamz/ 
+```plaintext
+FreeGamz/
 ├── main.py
 ├── script.py
 ├── UI.py
 ├── games.db
 ├── gamzimgs/
+```
 
 ## Technology used
 
