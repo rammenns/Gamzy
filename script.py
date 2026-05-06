@@ -217,10 +217,18 @@ def mainscript(gmz, conngmz):
 
 def main():
 
+    print("\033[1m Running: \033[0m")
+    print("")
+
     try:
 
         conntmr = connect("timer.db")
         conngmz = connect("games.db", timeout = 10)
+
+        if not os.path.exists("gamzimgs"):
+            os.makedirs("gamzimgs")
+            print("\033[1m Folder created \033[0m")
+            print("")
 
         tmr = conntmr.cursor()
         gmz = conngmz.cursor()
@@ -277,8 +285,10 @@ def main():
                     row = tmr.fetchone()
 
                 if row[0] - now > 0:
+                    print(" Entering sleep")
                     sleep(row[0] - now)
                 else:
+                    print(" Entering quick sleep")
                     sleep(30)
             except Exception as e:
                 print(f"\033[1;91m ERROR: \033[0m {e}")
