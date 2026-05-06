@@ -92,17 +92,15 @@ class MainWindow(QMainWindow):
         else:
             self.basefont = QFont("Arial", 10)
 
-        self.creategamz()
+        p = self.creategamz()
 
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.creategamz)
-        conn = connect("games.db", timeout=10)
-        cursor = conn.cursor()
-        cursor.execute("SELECT link, image, name, platform FROM games")
-        if not cursor.fetchall():
-            self.timer.start(5000)
-        else:
+
+        if p:
             self.timer.start(300000)
+        else:
+            self.timer.start(5000)
 
         self.setStyleSheet ("""
             #window {background-color: #424242;}
@@ -121,11 +119,14 @@ class MainWindow(QMainWindow):
         cursor = conn.cursor()
 
         cursor.execute("SELECT link, image, name, platform FROM games")
-        for link, image, name, platform in cursor.fetchall():
+        rows = cursor.fetchall()
+        for link, image, name, platform in rows:
             card = gamUI(link, image, name, platform, self.basefont)
             self.scrolyout.addWidget(card)
 
         conn.close()
+
+        return bool(rows)
 
 
 def main():
