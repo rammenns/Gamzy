@@ -1,9 +1,96 @@
 from sys import argv, exit
 from sqlite3 import connect
-from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy, QScrollArea
+from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy, QScrollArea, QPushButton
 from PyQt5.QtGui import QIcon, QPixmap, QFontDatabase, QFont
 from PyQt5.QtCore import Qt, QTimer
 from webbrowser import open_new_tab
+from requests import get
+import subprocess
+import os
+
+class updatebutton(QPushButton):
+    def __init__(self):
+        super().__init__()
+
+        self.setObjectName("updatebutton")
+        self.setText("New version available! Click to install.")
+        self.setFixedHeight(120)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+        self.setStyleSheet("""
+            QPushButton{
+                background-color: green;
+                color: white;
+                border: 2px solid white;
+                border-radius: 5px;
+            }
+            QPushButton:hover{
+                background-color: darkgreen;
+            }
+            QPushButton:disabled{
+                background-color: darkgreen;
+            }
+        """)
+
+        self.clicked.connect(self.update)
+
+    def update(self):
+        self.setEnabled(False)
+
+        self.setText("Updating...")
+
+        try:
+            url = get("https://api.github.com/repos/rammenns/FreeGamz/releases/latest", timeout=5)
+            if url.status_code != 200:
+                self.setText("Update failed")
+                self.setEnabled(True)
+                return
+
+            new = url.json()
+            downl= None
+
+            for asset in new['assets']:
+                if asset["name"].endswith(".exe"):
+                    downl = asset["browser_download_url"]
+                    break
+
+            if not downl:
+                self.setText("Update failed")
+                self.setEnabled(True)
+                return
+
+            file = get(downl, stream = True)
+
+            with open("update.exe", "wb") as f:
+                for chunk in file.iter_content(1024):
+                    if chunk:
+                        f.write(
+                            chunk
+                        )
+
+            subprocess.run(
+                [
+                    "taskkill",
+                    "/F",
+                    "/IM",
+                    "script.exe"
+                ],
+                capture_output=True
+            )
+
+            subprocess.Popen(
+                [
+                    "update.exe",
+                    "/VERYSILENT",
+                    "/NORESTART"
+                ]
+            )
+
+            exit()
+
+        except:
+            self.setText("Update failed")
+            self.setEnabled(True)
 
 class gamUI(QWidget):
     def __init__(self, link, image, name, platform, font):
@@ -115,6 +202,12 @@ class MainWindow(QMainWindow):
             if widget:
                 widget.deleteLater()
 
+        url = get("https://api.github.com/repos/rammenns/FreeGamz/releases/latest", timeout=5)
+        if url.status_code == 200:
+            ver = url.json()
+            if ver["tag_name"] != "1.2":
+                self.scrolyout.addWidget(updatebutton())
+
         conn = connect("games.db", timeout = 10)
         cursor = conn.cursor()
 
@@ -130,6 +223,12 @@ class MainWindow(QMainWindow):
 
 
 def main():
+    try:
+        if os.path.exists("update.exe"):
+            os.remove("update.exe")
+    except PermissionError:
+        pass
+
     app = QApplication(argv)
     window = MainWindow()
     window.show()
