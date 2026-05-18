@@ -6,6 +6,7 @@ from random import uniform
 from time import sleep
 import os
 from os.path import exists
+from winotify import Notification, audio
 
 def mainscript(gmz, conngmz):
 
@@ -18,23 +19,73 @@ def mainscript(gmz, conngmz):
         names = []
         imgs = []
         platforms = []
+        fail = []
 
         def insertnremove(links, names, imgs, platforms):
 
             print("\033[1m Attempting to update database: \033[0m")
+            print("")
+
+            if len(fail) == 3:
+
+                print("Database update   \033[91m FAILED \033[0m")
+                print("")
+                return
+
+            else:
+
+                print("\033[1m Database won't update: \033[0m")
+                print("")
+                for fails in fail:
+                    match fails:
+                        case "steamlogo.png":
+                            print("Steam")
+                        case "epiclogo.png":
+                            print("EpicGames")
+                        case _:
+                            print("GOG")
+                    print("")
 
             if links:
                 linklist = ",".join("?" for _ in links)
-                gmz.execute(f"DELETE FROM games WHERE link NOT IN ({linklist})", links)
+                if not fail:
+                    gmz.execute(f"DELETE FROM games WHERE link NOT IN ({linklist})", links)
+                else:
+                    faillist = ",".join("?" for _ in fail)
+                    gmz.execute(f"DELETE FROM games WHERE link NOT IN ({linklist}) AND platform NOT IN ({faillist})", links + fail)
+
             else:
                 gmz.execute("DELETE FROM games")
 
+            added = False
             for test in range(len(links)):
                 gmz.execute(
                     "INSERT OR IGNORE INTO games (link, name, image, platform) VALUES (?, ?, ?, ?)",
                     (links[test], names[test], imgs[test], platforms[test])
                 )
+                if gmz.rowcount > 0:
+                    added = True
             conngmz.commit()
+
+            if added:
+                base = os.path.dirname(
+                    os.path.abspath(__file__)
+                )
+
+                iconpth = os.path.join(
+                    base,
+                    "AppLogo.png"
+                )
+
+                notif = Notification(
+                    app_id = "FreeGamz",
+                    title = "🎮New Gamz!",
+                    msg = "Hey! there are new games waiting for you!",
+                    duration = "long",
+                    icon = iconpth
+                )
+                notif.set_audio(audio.Reminder, loop=False)
+                notif.show()
 
             folder = "gamzimgs/"
 
@@ -48,6 +99,7 @@ def mainscript(gmz, conngmz):
                     os.remove(file_path)
 
             print("Database updated   \033[92m SUCCESS \033[0m")
+            print("")
 
 
         headers = {
@@ -97,6 +149,7 @@ def mainscript(gmz, conngmz):
 
         except:
 
+            fail.append("steamlogo.png")
             print("Steam scrapping \033[91m FAILED \033[0m")
 
 
@@ -151,6 +204,7 @@ def mainscript(gmz, conngmz):
 
         except:
 
+            fail.append("goglogo.png")
             print("GOG scrapping \033[91m FAILED \033[0m")
 
 
@@ -199,6 +253,7 @@ def mainscript(gmz, conngmz):
 
         except:
 
+            fail.append("epiclogo.png")
             print("EpicGames scrapping \033[91m FAILED \033[0m")
 
         print("")
