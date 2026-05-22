@@ -19,8 +19,8 @@ Check the **Releases** section and download the installer from there. Installing
 
 ## Future improvements
 
-- The app will send notifications when new games have been found
-- Anything alse you would sugest and would make a diference
+- New platforms offers when the first 100% discount will appear
+- Anything else you would sugest and would make a diference
 
 ## The project sctructure
 
