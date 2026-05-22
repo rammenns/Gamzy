@@ -1,6 +1,6 @@
-from sys import argv, exit
+import sys
 from sqlite3 import connect
-from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy, QScrollArea, QPushButton
+from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy, QScrollArea, QPushButton, QProgressBar
 from PyQt5.QtGui import QIcon, QPixmap, QFontDatabase, QFont
 from PyQt5.QtCore import Qt, QTimer
 from webbrowser import open_new_tab
@@ -8,19 +8,37 @@ from requests import get
 import subprocess
 import os
 
+def pathfind(f):
+    if getattr(sys, "frozen", False):
+        base = sys._MEIPASS
+    else:
+        base = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base, f)
+
+def updatepth():
+    if getattr(sys, "frozen", False):
+        return os.path.join(os.path.dirname(sys.executable), "update.exe")
+    else:
+        return "update.exe"
+
 class updatebutton(QPushButton):
-    def __init__(self):
+    def __init__(self, font):
         super().__init__()
 
         self.setObjectName("updatebutton")
         self.setText("New version available! Click to install.")
         self.setFixedHeight(120)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.setFont(font)
+        self.progress = QProgressBar(self)
+        self.progress.setGeometry(162, 75, 650, 25)
+        self.progress.hide()
 
         self.setStyleSheet("""
             QPushButton{
                 background-color: green;
                 color: white;
+                text-align: center;
                 border: 2px solid white;
                 border-radius: 5px;
             }
@@ -35,14 +53,13 @@ class updatebutton(QPushButton):
         self.clicked.connect(self.update)
 
     def update(self):
-        self.setEnabled(False)
 
-        self.setText("Updating...")
+        self.setEnabled(False)
 
         try:
             url = get("https://api.github.com/repos/rammenns/FreeGamz/releases/latest", timeout=5)
             if url.status_code != 200:
-                self.setText("Update failed")
+                self.setText("Update failed :( Try again")
                 self.setEnabled(True)
                 return
 
@@ -54,43 +71,82 @@ class updatebutton(QPushButton):
                     downl = asset["browser_download_url"]
                     break
 
-            if not downl:
-                self.setText("Update failed")
+            if downl is None:
+                self.setText("Update failed :( Try again")
                 self.setEnabled(True)
                 return
 
-            file = get(downl, stream = True)
+            file = get(downl, stream = True, timeout = 10)
+            if file.status_code != 200:
+                self.setText("Update failed :( Try again")
+                self.setEnabled(True)
+                return
 
-            with open("update.exe", "wb") as f:
-                for chunk in file.iter_content(1024):
+            self.progress.show()
+            total = int(file.headers.get("content-length", 0))
+            downloaded = 0
+
+            with open(updatepth(), "wb") as f:
+                for chunk in file.iter_content(8192):
                     if chunk:
-                        f.write(
-                            chunk
-                        )
+                        f.write(chunk)
+                        downloaded += len(chunk)
+
+                        if total > 0:
+                            percent = int(downloaded * 100 / total)
+                            self.progress.setValue(percent)
+                            self.setText(f"Updating... {percent}%")
+
+                            QApplication.processEvents()
+
+            self.progress.setValue(100)
+            self.setText("Installing...")
+            QApplication.processEvents()
+
+            connsafe = connect("safe.db", timeout=10)
+            safe = connsafe.cursor()
+            safe.execute("SELECT safe FROM safety")
+            row = safe.fetchone()
+            if not row or not row[0]:
+                connsafe.close()
+                self.setText("Update failed :( Try again")
+                self.progress.hide()
+                self.setEnabled(True)
+                try:
+                    os.remove(updatepth())
+                except (FileNotFoundError, PermissionError):
+                    pass
+                return
+
+            connsafe.close()
 
             subprocess.run(
                 [
                     "taskkill",
                     "/F",
                     "/IM",
-                    "script.exe"
+                    "GamzScript.exe"
                 ],
                 capture_output=True
             )
-
             subprocess.Popen(
                 [
-                    "update.exe",
+                    updatepth(),
                     "/VERYSILENT",
                     "/NORESTART"
                 ]
             )
-
-            exit()
+            QApplication.quit()
 
         except:
-            self.setText("Update failed")
+            self.setText("Update failed :( Try again")
+            self.progress.hide()
             self.setEnabled(True)
+            try:
+                os.remove(updatepth())
+            except (FileNotFoundError, PermissionError):
+                pass
+            return
 
 class gamUI(QWidget):
     def __init__(self, link, image, name, platform, font):
@@ -98,7 +154,7 @@ class gamUI(QWidget):
 
         self.setObjectName("FreeGam")
         self.link = link
-        self.setFixedHeight(120)
+        self.setFixedHeight(145)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.setAttribute(Qt.WA_StyledBackground, True)
 
@@ -114,7 +170,7 @@ class gamUI(QWidget):
         self.namelabel.setFont(font)
 
         platformlabel = QLabel(self)
-        platformmap = QPixmap(platform)
+        platformmap = QPixmap(pathfind(platform))
         scale = platformmap.scaledToHeight(50, Qt.SmoothTransformation)
         platformlabel.setPixmap(scale)
 
@@ -147,9 +203,9 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("FreeGamz")
-        self.setFixedSize(900, 415)
+        self.setFixedSize(950, 415)
         self.move(510, 350)
-        self.setWindowIcon(QIcon("gamzicon.png"))
+        self.setWindowIcon(QIcon(pathfind("gamzicon.png")))
         self.setObjectName("window")
 
         central = QWidget()
@@ -172,7 +228,7 @@ class MainWindow(QMainWindow):
         scroll.setWidget(scrollgamz)
         layout.addWidget(scroll)
 
-        namefont = QFontDatabase.addApplicationFont("Minecraftia-Regular.ttf")
+        namefont = QFontDatabase.addApplicationFont(pathfind("Minecraftia-Regular.ttf"))
         fontfam = QFontDatabase.applicationFontFamilies(namefont)
         if fontfam:
             self.basefont = QFont(fontfam[0], 10)
@@ -196,23 +252,32 @@ class MainWindow(QMainWindow):
         scrollgamz.setStyleSheet("background-color: #424242;")
 
     def creategamz(self):
+
         while self.scrolyout.count():
             item = self.scrolyout.takeAt(0)
             widget = item.widget()
             if widget:
                 widget.deleteLater()
 
-        url = get("https://api.github.com/repos/rammenns/FreeGamz/releases/latest", timeout=5)
+        headers = {
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "FreeGamz"
+        }
+        url = get("https://api.github.com/repos/rammenns/FreeGamz/releases/latest",headers = headers, timeout=5)
         if url.status_code == 200:
             ver = url.json()
-            if ver["tag_name"] != "1.2":
-                self.scrolyout.addWidget(updatebutton())
+            if ver["tag_name"] != "1.3":
+                self.scrolyout.addWidget(updatebutton(self.basefont))
 
         conn = connect("games.db", timeout = 10)
         cursor = conn.cursor()
 
-        cursor.execute("SELECT link, image, name, platform FROM games")
-        rows = cursor.fetchall()
+        try:
+            cursor.execute("SELECT link, image, name, platform FROM games")
+            rows = cursor.fetchall()
+        except:
+            rows = []
+
         for link, image, name, platform in rows:
             card = gamUI(link, image, name, platform, self.basefont)
             self.scrolyout.addWidget(card)
@@ -224,15 +289,14 @@ class MainWindow(QMainWindow):
 
 def main():
     try:
-        if os.path.exists("update.exe"):
-            os.remove("update.exe")
-    except PermissionError:
+        os.remove(updatepth())
+    except (FileNotFoundError, PermissionError):
         pass
 
-    app = QApplication(argv)
+    app = QApplication(sys.argv)
     window = MainWindow()
     window.show()
-    exit(app.exec_())
+    sys.exit(app.exec_())
 
 if __name__ == "__main__":
     main()
