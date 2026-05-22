@@ -1,12 +1,14 @@
 from sqlite3 import connect
 from requests import get
 from bs4 import BeautifulSoup
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from random import uniform
 from time import sleep
 import os
 from os.path import exists
 from winotify import Notification, audio
+import sys
+
 
 def mainscript(gmz, conngmz):
 
@@ -68,21 +70,17 @@ def mainscript(gmz, conngmz):
             conngmz.commit()
 
             if added:
-                base = os.path.dirname(
-                    os.path.abspath(__file__)
-                )
-
-                iconpth = os.path.join(
-                    base,
-                    "AppLogo.png"
-                )
+                if getattr(sys, "frozen", False):
+                    base = sys._MEIPASS
+                else:
+                    base = os.path.dirname(os.path.abspath(__file__))
 
                 notif = Notification(
                     app_id = "FreeGamz",
                     title = "🎮New Gamz!",
                     msg = "Hey! there are new games waiting for you!",
                     duration = "long",
-                    icon = iconpth
+                    icon = os.path.join(base,"AppLogo.png")
                 )
                 notif.set_audio(audio.Reminder, loop=False)
                 notif.show()
@@ -147,10 +145,10 @@ def mainscript(gmz, conngmz):
 
             print("Database insertion \033[92m SUCCESS \033[0m")
 
-        except:
+        except Exception as e:
 
             fail.append("steamlogo.png")
-            print("Steam scrapping \033[91m FAILED \033[0m")
+            print(f"Steam scrapping \033[91m FAILED \033[0m {e}")
 
 
         print("")
@@ -179,6 +177,7 @@ def mainscript(gmz, conngmz):
                         gam = gam.get('href')
                         gam = gam.rstrip('/').split('/')[-1]
                         names.append(gam.replace('_', ' ').title())
+                        gamnam = gam
                     else:
                         sure = False
 
@@ -188,24 +187,25 @@ def mainscript(gmz, conngmz):
                             gam = gam.find('store-picture')
                             gam = gam.find('picture')
                             gam = gam.find('source')
-                            url = gam['srcset'].split()[0]
-                            file = "gamzimgs/" + url.split("/")[-1]
+                            url = gam['srcset'].split(", ")[1].rsplit(" ", 1)[0]
+                            file = f"gamzimgs/{gamnam}.webp"
                             if not exists(file):
                                 gamimg = get(url, timeout = 5).content
                                 with open(file, "wb") as f:
                                     f.write(gamimg)
                             imgs.append(file)
-                        except:
+                        except Exception as e:
+                            print(e)
                             imgs.append("goglogo.png")
 
                         platforms.append("goglogo.png")
 
             print("Database insertion \033[92m SUCCESS \033[0m")
 
-        except:
+        except Exception as e:
 
             fail.append("goglogo.png")
-            print("GOG scrapping \033[91m FAILED \033[0m")
+            print(f"GOG scrapping \033[91m FAILED \033[0m {e}")
 
 
         print("")
@@ -226,35 +226,28 @@ def mainscript(gmz, conngmz):
                 data = response.json()
 
                 for gam in data["data"]["Catalog"]["searchStore"]["elements"]:
-                    gamz = gam
-                    if gam["promotions"]:
-                        gam = gam["promotions"]
-                        if gam["promotionalOffers"]:
-                            gam = gam["promotionalOffers"]
-                            if gam[0]["promotionalOffers"]:
-                                gam = gam[0]["promotionalOffers"]
-                                if gam[0]["discountSetting"]:
-                                    gam = gam[0]["discountSetting"]
-                                    if gam["discountPercentage"]==0:
-                                        if gamz["offerMappings"][0]:
-                                            gam=gamz["offerMappings"][0]
-                                            links.append(f"https://store.epicgames.com/en-US/p/{gam['pageSlug']}")
-                                            names.append(gamz["title"])
-                                            url = gamz["keyImages"][0]["url"]
-                                            file = "gamzimgs/" + url.split("/")[-1]
-                                            if not exists(file):
-                                                gamimg = get(url, timeout = 5).content
-                                                with open(file, "wb") as f:
-                                                    f.write(gamimg)
-                                            imgs.append(file)
-                                            platforms.append("epiclogo.png")
+                    if gam["isCodeRedemptionOnly"] == True and gam["effectiveDate"]:
+                        offertime = datetime.strptime(gam["effectiveDate"], "%Y-%m-%dT%H:%M:%S.%fZ")
+                        offertime = offertime.replace(tzinfo=timezone.utc)
+                        now = datetime.now(timezone.utc)
+                        if offertime <= now:
+                            links.append(f"https://store.epicgames.com/en-US/p/{gam['productSlug']}")
+                            names.append(gam["title"])
+                            url = gam["keyImages"][0]["url"]
+                            file = f"gamzimgs/{gam['id']}.jpg"
+                            if not exists(file):
+                                gamimg = get(url, timeout=5).content
+                                with open(file, "wb") as f:
+                                    f.write(gamimg)
+                            imgs.append(file)
+                            platforms.append("epiclogo.png")
 
             print("Database insertion \033[92m SUCCESS \033[0m")
 
-        except:
+        except Exception as e:
 
             fail.append("epiclogo.png")
-            print("EpicGames scrapping \033[91m FAILED \033[0m")
+            print(f"EpicGames scrapping \033[91m FAILED \033[0m {e}")
 
         print("")
 
@@ -262,9 +255,9 @@ def mainscript(gmz, conngmz):
 
         return True
 
-    except:
+    except Exception as e:
 
-        print("\033[1;91m ERROR: \033[0;91m script FAILED on running \033[0m")
+        print(f"\033[1;91m ERROR: \033[0;91m script FAILED on running \033[0m {e}")
         print("")
 
         return False
@@ -276,6 +269,16 @@ def main():
     print("")
 
     try:
+        connsafe = connect("safe.db")
+        safe = connsafe.cursor()
+        safe.execute("CREATE TABLE IF NOT EXISTS safety (safe BOOLEAN)")
+        safe.execute("SELECT safe FROM safety")
+        rowz = safe.fetchone()
+        if rowz is None:
+            safe.execute("INSERT INTO safety VALUES (?)", (False,))
+        else:
+            safe.execute("UPDATE safety SET safe = ?", (False,))
+        connsafe.commit()
 
         conntmr = connect("timer.db")
         conngmz = connect("games.db", timeout = 10)
@@ -314,6 +317,9 @@ def main():
             print("\033[1m Entered loop \033[0m")
             print("")
 
+            safe.execute("UPDATE safety SET safe = ?", (False,))
+            connsafe.commit()
+
             tmr.execute("SELECT nextupdate FROM timer")
             row = tmr.fetchone()
 
@@ -341,17 +347,28 @@ def main():
 
                 if row[0] - now > 0:
                     print(" Entering sleep")
+                    safe.execute("UPDATE safety SET safe = ?", (True,))
+                    connsafe.commit()
                     sleep(row[0] - now)
                 else:
                     print(" Entering quick sleep")
+                    safe.execute("UPDATE safety SET safe = ?", (True,))
+                    connsafe.commit()
                     sleep(30)
             except Exception as e:
                 print(f"\033[1;91m ERROR: \033[0m {e}")
                 print("")
+                safe.execute("UPDATE safety SET safe = ?", (True,))
+                connsafe.commit()
                 sleep(600)
 
-    except:
-        print("\033[1;91m ERROR: \033[0;91m Main script FAILED \033[0m")
+    except Exception as e:
+        for conn in [connsafe, conntmr, conngmz]:
+            try:
+                conn.close()
+            except:
+                pass
+        print("\033[1;91m ERROR: \033[0;91m Main script FAILED \033[0m {e}")
 
 if __name__ == "__main__":
     main()
