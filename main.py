@@ -16,7 +16,7 @@ def uirun():
 def scriptrun():
 
     for p in psutil.process_iter(['name']):
-        if p.info['name'] and p.info['name'].lower() == "script.exe":
+        if p.info['name'] and p.info['name'].lower() == "GamzScript.exe":
             return True
 
     return False
@@ -28,7 +28,7 @@ def main():
         return
 
     if not scriptrun():
-        Popen(["script.exe"])
+        Popen(["GamzScript.exe"])
 
     window = MainWindow()
     window.show()
