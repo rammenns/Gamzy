@@ -7,6 +7,8 @@ from webbrowser import open_new_tab
 from requests import get
 import subprocess
 import os
+from ctypes import windll
+import tempfile
 
 def pathfind(f):
     if getattr(sys, "frozen", False):
@@ -15,18 +17,20 @@ def pathfind(f):
         base = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(base, f)
 
-def updatepth():
+def dr():
     if getattr(sys, "frozen", False):
-        return os.path.join(os.path.dirname(sys.executable), "update.exe")
-    else:
-        return "update.exe"
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+def updatepth():
+    return os.path.join(tempfile.gettempdir(), "update.exe")
 
 class updatebutton(QPushButton):
-    def __init__(self, font):
+    def __init__(self, font, newver):
         super().__init__()
 
         self.setObjectName("updatebutton")
-        self.setText("New version available! Click to install.")
+        self.setText(f"Version {newver} available! Click to install.")
         self.setFixedHeight(120)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.setFont(font)
@@ -48,6 +52,12 @@ class updatebutton(QPushButton):
             QPushButton:disabled{
                 background-color: darkgreen;
             }
+            QProgressBar{
+                background-color: darkgreen;
+            }
+            QProgressBar::chunk{
+                background-color: white;
+            }
         """)
 
         self.clicked.connect(self.update)
@@ -57,6 +67,14 @@ class updatebutton(QPushButton):
         self.setEnabled(False)
 
         try:
+
+            try:
+                os.remove(updatepth())
+            except FileNotFoundError:
+                pass
+            except PermissionError:
+                pass
+
             url = get("https://api.github.com/repos/rammenns/FreeGamz/releases/latest", timeout=5)
             if url.status_code != 200:
                 self.setText("Update failed :( Try again")
@@ -103,19 +121,16 @@ class updatebutton(QPushButton):
             self.setText("Installing...")
             QApplication.processEvents()
 
-            connsafe = connect("safe.db", timeout=10)
+            safepth = os.path.join(dr(), "safe.db")
+            connsafe = connect(safepth, timeout=10)
             safe = connsafe.cursor()
             safe.execute("SELECT safe FROM safety")
             row = safe.fetchone()
             if not row or not row[0]:
                 connsafe.close()
-                self.setText("Update failed :( Try again")
+                self.setText("Woops, small error :( Try again in a few seconds")
                 self.progress.hide()
                 self.setEnabled(True)
-                try:
-                    os.remove(updatepth())
-                except (FileNotFoundError, PermissionError):
-                    pass
                 return
 
             connsafe.close()
@@ -129,23 +144,28 @@ class updatebutton(QPushButton):
                 ],
                 capture_output=True
             )
-            subprocess.Popen(
-                [
-                    updatepth(),
-                    "/VERYSILENT",
-                    "/NORESTART"
-                ]
+
+            permission = windll.shell32.ShellExecuteW(
+                None,
+                "runas",
+                updatepth(),
+                "/VERYSILENT /NORESTART",
+                None,
+                1
             )
+            if permission <= 32:
+                self.setText("Update cancelled :( Try again?")
+                self.progress.hide()
+                self.setEnabled(True)
+                subprocess.Popen(["GamzScript.exe"])
+                return
+
             QApplication.quit()
 
         except:
             self.setText("Update failed :( Try again")
             self.progress.hide()
             self.setEnabled(True)
-            try:
-                os.remove(updatepth())
-            except (FileNotFoundError, PermissionError):
-                pass
             return
 
 class gamUI(QWidget):
@@ -241,7 +261,7 @@ class MainWindow(QMainWindow):
         self.timer.timeout.connect(self.creategamz)
 
         if p:
-            self.timer.start(300000)
+            self.timer.start(3600000)
         else:
             self.timer.start(5000)
 
@@ -266,11 +286,17 @@ class MainWindow(QMainWindow):
         url = get("https://api.github.com/repos/rammenns/FreeGamz/releases/latest",headers = headers, timeout=5)
         if url.status_code == 200:
             ver = url.json()
-            if ver["tag_name"] != "1.3":
-                self.scrolyout.addWidget(updatebutton(self.basefont))
+            if ver["tag_name"] != "1.3.1":
+                self.scrolyout.addWidget(updatebutton(self.basefont, ver["tag_name"]))
 
-        conn = connect("games.db", timeout = 10)
-        cursor = conn.cursor()
+        conn = None
+        cursor = None
+        try:
+            gamespth = os.path.join(dr(), "games.db")
+            conn = connect(gamespth, timeout = 10)
+            cursor = conn.cursor()
+        except:
+            return False
 
         try:
             cursor.execute("SELECT link, image, name, platform FROM games")
@@ -288,11 +314,6 @@ class MainWindow(QMainWindow):
 
 
 def main():
-    try:
-        os.remove(updatepth())
-    except (FileNotFoundError, PermissionError):
-        pass
-
     app = QApplication(sys.argv)
     window = MainWindow()
     window.show()
