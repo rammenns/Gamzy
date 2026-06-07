@@ -9,6 +9,10 @@ from os.path import exists
 from winotify import Notification, audio
 import sys
 
+def dr():
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
 
 def mainscript(gmz, conngmz):
 
@@ -34,7 +38,7 @@ def mainscript(gmz, conngmz):
                 print("")
                 return
 
-            else:
+            elif fail:
 
                 print("\033[1m Database won't update: \033[0m")
                 print("")
@@ -85,7 +89,7 @@ def mainscript(gmz, conngmz):
                 notif.set_audio(audio.Reminder, loop=False)
                 notif.show()
 
-            folder = "gamzimgs/"
+            folder = os.path.join(dr(), "gamzimgs/")
 
             gmz.execute("SELECT image FROM games")
             dbimgs = {row[0] for row in gmz.fetchall()}
@@ -125,14 +129,14 @@ def mainscript(gmz, conngmz):
                 for gam in soup.find_all('a', class_="search_result_row ds_collapse_flag"):
 
                     links.append(gam['href'])
-                    names.append(gam['href'].split('/')[-2])
+                    names.append(gam['href'].split('/')[-2].replace('_', ' '))
                     gamm = gam['href']
 
                     try:
                         gam = gam.find('div', class_= "search_capsule")
                         gam = gam.find('img')
                         url = gam.get('src')
-                        file = f"gamzimgs/{gamm.split('/')[4]}.jpg"
+                        file = os.path.join(dr(), f"gamzimgs/{gamm.split('/')[4]}.jpg")
                         if not exists(file):
                             gamimg = get(url, timeout = 5).content
                             with open(file, "wb") as f:
@@ -188,7 +192,7 @@ def mainscript(gmz, conngmz):
                             gam = gam.find('picture')
                             gam = gam.find('source')
                             url = gam['srcset'].split(", ")[1].rsplit(" ", 1)[0]
-                            file = f"gamzimgs/{gamnam}.webp"
+                            file = os.path.join(dr(), f"gamzimgs/{gamnam}.webp")
                             if not exists(file):
                                 gamimg = get(url, timeout = 5).content
                                 with open(file, "wb") as f:
@@ -234,7 +238,7 @@ def mainscript(gmz, conngmz):
                             links.append(f"https://store.epicgames.com/en-US/p/{gam['productSlug']}")
                             names.append(gam["title"])
                             url = gam["keyImages"][0]["url"]
-                            file = f"gamzimgs/{gam['id']}.jpg"
+                            file = os.path.join(dr(), f"gamzimgs/{gam['id']}.jpg")
                             if not exists(file):
                                 gamimg = get(url, timeout=5).content
                                 with open(file, "wb") as f:
@@ -267,9 +271,14 @@ def main():
 
     print("\033[1m Running: \033[0m")
     print("")
+    connsafe = None
+    conntmr = None
+    conngmz = None
 
     try:
-        connsafe = connect("safe.db")
+        safepth = os.path.join(dr(), "safe.db")
+        print("safe =", safepth)
+        connsafe = connect(safepth)
         safe = connsafe.cursor()
         safe.execute("CREATE TABLE IF NOT EXISTS safety (safe BOOLEAN)")
         safe.execute("SELECT safe FROM safety")
@@ -280,22 +289,23 @@ def main():
             safe.execute("UPDATE safety SET safe = ?", (False,))
         connsafe.commit()
 
-        conntmr = connect("timer.db")
-        conngmz = connect("games.db", timeout = 10)
+        timerpth = os.path.join(dr(), "timer.db")
+        conntmr = connect(timerpth)
+        gamespth = os.path.join(dr(), "games.db")
+        conngmz = connect(gamespth, timeout = 10)
 
-        if not os.path.exists("gamzimgs"):
-            os.makedirs("gamzimgs")
+        gimgpth = os.path.join(dr(), "gamzimgs")
+        if not os.path.exists(gimgpth):
+            os.makedirs(gimgpth)
             print("\033[1m Folder created \033[0m")
             print("")
 
         tmr = conntmr.cursor()
         gmz = conngmz.cursor()
 
-        #tmr.execute("DROP TABLE IF EXISTS timer")
         tmr.execute("CREATE TABLE IF NOT EXISTS timer (nextupdate REAL)")
         conntmr.commit()
 
-        #gmz.execute("DROP TABLE IF EXISTS games")
         gmz.execute("""
         CREATE TABLE IF NOT EXISTS games(
             link TEXT UNIQUE PRIMARY KEY,
@@ -368,7 +378,7 @@ def main():
                 conn.close()
             except:
                 pass
-        print("\033[1;91m ERROR: \033[0;91m Main script FAILED \033[0m {e}")
+        print(f"\033[1;91m ERROR: \033[0;91m Main script FAILED \033[0m {e}")
 
 if __name__ == "__main__":
     main()
