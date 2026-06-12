@@ -14,6 +14,10 @@ def dr():
         return os.path.dirname(sys.executable)
     return os.path.dirname(os.path.abspath(__file__))
 
+def namecut(nam):
+    inval = '<>:"/\\|?*'
+    return ''.join(c for c in nam if c not in inval).strip()
+
 def mainscript(gmz, conngmz):
 
     try:
@@ -32,7 +36,7 @@ def mainscript(gmz, conngmz):
             print("\033[1m Attempting to update database: \033[0m")
             print("")
 
-            if len(fail) == 3:
+            if len(fail) == 4:
 
                 print("Database update   \033[91m FAILED \033[0m")
                 print("")
@@ -48,8 +52,10 @@ def mainscript(gmz, conngmz):
                             print("Steam")
                         case "epiclogo.png":
                             print("EpicGames")
-                        case _:
+                        case "goglogo.png":
                             print("GOG")
+                        case _:
+                            print("itch.io")
                     print("")
 
             if links:
@@ -86,6 +92,10 @@ def mainscript(gmz, conngmz):
                     duration = "long",
                     icon = os.path.join(base,"AppLogo.png")
                 )
+                notif.add_actions(
+                    label="Open",
+                    launch=os.path.join(dr(), "FreeGamz.exe")
+                )
                 notif.set_audio(audio.Reminder, loop=False)
                 notif.show()
 
@@ -100,7 +110,7 @@ def mainscript(gmz, conngmz):
                 if file_path not in dbimgs and file not in {"steamlogo.png", "epiclogo.png", "goglogo.png"}:
                     os.remove(file_path)
 
-            print("Database updated   \033[92m SUCCESS \033[0m")
+            print("Database updated    \033[92m SUCCESS \033[0m")
             print("")
 
 
@@ -120,7 +130,7 @@ def mainscript(gmz, conngmz):
 
             response = get("https://store.steampowered.com/search?maxprice=free&supportedlang=english&specials=1&ndl=1", headers=headers, timeout = 5)
 
-            print("Steam request      \033[92m SUCCESS \033[0m")
+            print("Steam request       \033[92m SUCCESS \033[0m")
 
             if response.status_code == 200:
 
@@ -128,26 +138,51 @@ def mainscript(gmz, conngmz):
 
                 for gam in soup.find_all('a', class_="search_result_row ds_collapse_flag"):
 
-                    links.append(gam['href'])
-                    names.append(gam['href'].split('/')[-2].replace('_', ' '))
-                    gamm = gam['href']
+                    price = gam
+                    if price:
+                        price = price.find('div', class_="responsive_search_name_combined")
+                    if price:
+                        price = price.find('div', class_="search_price_discount_combined responsive_secondrow")
+                    if price:
+                        price = price.find('div', class_="search_discount_and_price responsive_secondrow")
+                    if price:
+                        price = price.find('div', class_="discount_block search_discount_block")
+                    if price:
+                        pricep = price.find('div', class_="discount_pct")
 
-                    try:
-                        gam = gam.find('div', class_= "search_capsule")
-                        gam = gam.find('img')
-                        url = gam.get('src')
-                        file = os.path.join(dr(), f"gamzimgs/{gamm.split('/')[4]}.jpg")
-                        if not exists(file):
-                            gamimg = get(url, timeout = 5).content
-                            with open(file, "wb") as f:
-                                f.write(gamimg)
-                        imgs.append(file)
-                    except:
-                        imgs.append("steamlogo.png")
+                    if pricep and pricep.text == "-100%":
 
-                    platforms.append("steamlogo.png")
+                        price = price.find('div', class_="discount_prices")
+                        if price:
+                            price = price.find('div', class_="discount_final_price")
 
-            print("Database insertion \033[92m SUCCESS \033[0m")
+                        if price and price.text == "0,00€":
+
+                            links.append(gam['href'])
+                            nam = gam['href'].split('/')[-2].replace('_', ' ')
+                            names.append(nam)
+                            gamm = gam['href']
+
+                            try:
+                                gam = gam.find('div', class_= "search_capsule")
+                                if gam:
+                                    gam = gam.find('img')
+                                url = gam.get('src')
+                                if not url:
+                                    continue
+                                ext = os.path.splitext(url)[1].split("?")[0]
+                                file = os.path.join(dr(), f"gamzimgs/{namecut(nam)}{ext}")
+                                if not exists(file):
+                                    gamimg = get(url, timeout = 5).content
+                                    with open(file, "wb") as f:
+                                        f.write(gamimg)
+                                imgs.append(file)
+                            except:
+                                imgs.append("steamlogo.png")
+
+                            platforms.append("steamlogo.png")
+
+            print("Steam scrapping     \033[92m SUCCESS \033[0m")
 
         except Exception as e:
 
@@ -165,7 +200,7 @@ def mainscript(gmz, conngmz):
 
             response = get("https://www.gog.com/en/", headers=headers, timeout = 5)
 
-            print("GOG request        \033[92m SUCCESS \033[0m")
+            print("GOG request         \033[92m SUCCESS \033[0m")
 
             if response.status_code == 200:
 
@@ -178,9 +213,13 @@ def mainscript(gmz, conngmz):
                         gam = link.find('a', class_="giveaway__overlay-link")
                         links.append(gam['href'])
 
-                        gam = gam.get('href')
-                        gam = gam.rstrip('/').split('/')[-1]
-                        names.append(gam.replace('_', ' ').title())
+                        if gam:
+                            gam = gam.get('href')
+                        if gam:
+                            gam = gam.rstrip('/').split('/')[-1]
+                        if gam:
+                            nam = gam.replace('_', ' ').title()
+                        names.append(nam)
                         gamnam = gam
                     else:
                         sure = False
@@ -188,11 +227,17 @@ def mainscript(gmz, conngmz):
                     if sure:
                         try:
                             gam = link.find('div', class_="giveaway__image")
-                            gam = gam.find('store-picture')
-                            gam = gam.find('picture')
-                            gam = gam.find('source')
+                            if gam:
+                                gam = gam.find('store-picture')
+                            if gam:
+                                gam = gam.find('picture')
+                            if gam:
+                                gam = gam.find('source')
                             url = gam['srcset'].split(", ")[1].rsplit(" ", 1)[0]
-                            file = os.path.join(dr(), f"gamzimgs/{gamnam}.webp")
+                            if not url:
+                                continue
+                            ext = os.path.splitext(url)[1].split("?")[0]
+                            file = os.path.join(dr(), f"gamzimgs/{namecut(nam)}{ext}")
                             if not exists(file):
                                 gamimg = get(url, timeout = 5).content
                                 with open(file, "wb") as f:
@@ -204,7 +249,7 @@ def mainscript(gmz, conngmz):
 
                         platforms.append("goglogo.png")
 
-            print("Database insertion \033[92m SUCCESS \033[0m")
+            print("GOG scrapping       \033[92m SUCCESS \033[0m")
 
         except Exception as e:
 
@@ -223,35 +268,112 @@ def mainscript(gmz, conngmz):
 
             response = get("https://store-site-backend-static-ipv4.ak.epicgames.com/freeGamesPromotions?locale=en-US&country=RO&allowCountries=RO", headers=headers, timeout = 5)
 
-            print("EpicGames request  \033[92m SUCCESS \033[0m")
+            print("EpicGames request   \033[92m SUCCESS \033[0m")
 
             if response.status_code == 200:
 
                 data = response.json()
 
                 for gam in data["data"]["Catalog"]["searchStore"]["elements"]:
-                    if gam["isCodeRedemptionOnly"] == True and gam["effectiveDate"]:
-                        offertime = datetime.strptime(gam["effectiveDate"], "%Y-%m-%dT%H:%M:%S.%fZ")
-                        offertime = offertime.replace(tzinfo=timezone.utc)
-                        now = datetime.now(timezone.utc)
-                        if offertime <= now:
-                            links.append(f"https://store.epicgames.com/en-US/p/{gam['productSlug']}")
-                            names.append(gam["title"])
-                            url = gam["keyImages"][0]["url"]
-                            file = os.path.join(dr(), f"gamzimgs/{gam['id']}.jpg")
-                            if not exists(file):
-                                gamimg = get(url, timeout=5).content
-                                with open(file, "wb") as f:
-                                    f.write(gamimg)
-                            imgs.append(file)
-                            platforms.append("epiclogo.png")
 
-            print("Database insertion \033[92m SUCCESS \033[0m")
+                    if gam["price"]:
+                        gamn = gam["price"]
+                        if gamn["totalPrice"]:
+                            gamn = gamn["totalPrice"]
+                            if gamn["discountPrice"] == gamn["voucherDiscount"] and gamn["originalPrice"] == gamn["discount"]:
+                                if gam["catalogNs"]:
+                                    gamn = gam["catalogNs"]
+                                    if gamn["mappings"][0]:
+                                        gamn = gamn["mappings"][0]
+                                        if gamn["pageSlug"]:
+                                            links.append(f"https://store.epicgames.com/en-US/p/{gamn['pageSlug']}")
+                                            if gam["title"]:
+                                                nam = gam["title"]
+                                                names.append(nam)
+                                                if gam["keyImages"][0]["url"]:
+                                                    url = gam["keyImages"][0]["url"]
+                                                    ext = os.path.splitext(url)[1].split("?")[0]
+                                                    if not ext:
+                                                        ext = ".png"
+                                                    file = os.path.join(dr(), f"gamzimgs/{namecut(nam)}{ext}")
+                                                    if not exists(file):
+                                                        gamimg = get(url, timeout=5).content
+                                                        with open(file, "wb") as f:
+                                                            f.write(gamimg)
+                                                    imgs.append(file)
+                                                    platforms.append("epiclogo.png")
+
+            print("EpicGames scrapping \033[92m SUCCESS \033[0m")
 
         except Exception as e:
 
             fail.append("epiclogo.png")
             print(f"EpicGames scrapping \033[91m FAILED \033[0m {e}")
+
+        print("")
+
+
+        #itch.io search
+
+        print("\033[1m Requesting itch.io URL: \033[0m")
+
+        try:
+            p = 1
+            response = get(f"https://itch.io/games/on-sale?page={p}&format=json", headers=headers, timeout=5)
+            data = response.json()
+            soup = BeautifulSoup(data["content"], "html.parser")
+
+            if response.status_code == 200:
+
+                print("itch.io request     \033[92m SUCCESS \033[0m")
+
+                while data["content"]:
+
+                    if response.status_code == 200:
+
+                        for gam in soup.find_all('div', class_="game_cell"):
+
+                            if gam:
+                                gamn = gam.find('div', class_="game_thumb")
+                                gam = gam.find('div', class_="game_cell_data")
+                            if gam:
+                                gam = gam.find('div', class_="game_title")
+                            if gam:
+                                nam = gam.find('a' , class_="title game_link").text
+                                gam = gam.find('a', class_="price_tag meta_tag sale")
+                            if gam:
+                                price = gam.find('div', class_="price_value")
+                                sale = gam.find('div', class_="sale_tag")
+
+                            if (price and sale and price.text == "$0" and sale.text == "-100%"):
+                                if gamn:
+                                    gamn = gamn.find('a', class_="thumb_link game_link")
+                                links.append(gamn['href'])
+                                names.append(nam)
+                                if gamn:
+                                    gamn = gamn.find('img', class_="lazy_loaded")
+                                url = gamn['data-lazy_src']
+                                if not url:
+                                    continue
+                                ext = os.path.splitext(url)[1].split("?")[0]
+                                file = os.path.join(dr(), f"gamzimgs/{namecut(nam)}{ext}")
+                                if not exists(file):
+                                    gamimg = get(url, timeout=5).content
+                                    with open(file, "wb") as f:
+                                        f.write(gamimg)
+                                imgs.append(file)
+                                platforms.append("itchlogo.png")
+
+                    p += 1
+                    response = get(f"https://itch.io/games/on-sale?page={p}&format=json", headers=headers, timeout=5)
+                    data = response.json()
+                    soup = BeautifulSoup(data["content"], "html.parser")
+
+            print("itch.io scrapping   \033[92m SUCCESS \033[0m")
+
+        except Exception as e:
+            fail.append("itchlogo.png")
+            print(f"itch.io scrapping   \033[91m FAILED \033[0m {e}")
 
         print("")
 
