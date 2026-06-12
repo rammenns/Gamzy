@@ -1,6 +1,6 @@
 # FreeGamz
 
-Hello, and welcome! **FreeGamz** is a small desktop app that searches for you what temporary **free games** are on **Steam**, **Epic Games**, **GOG** in one place, so you don't need to bother searching everywhere. In the next versions I'll try to make the app show what **free games** offers are on other platforms aswell.
+Hello, and welcome! **FreeGamz** is a small desktop app that searches for you what temporary **free games** are on **Steam**, **Epic Games**, **GOG**, **itch.io** in one place, so you don't need to bother searching everywhere. In the next versions I'll try to make the app show what **free games** offers are on other platforms aswell.
 
 ## How to download
 
@@ -19,23 +19,13 @@ Check the **Releases** section and download the installer from there. Installing
 
 ## Future improvements
 
-- New platforms offers when the first 100% discount will appear
+- New platforms offers when the first 100% discount or giveaway will appear
 - Anything else you would sugest and would make a diference
-
-## The project sctructure
-
-```plaintext
-FreeGamz/
-├── main.py
-├── script.py
-├── UI.py
-├── games.db
-├── gamzimgs/
-```
 
 ## Technology used
 
-- Pythn
+- Python
 - PyQt5 (GUI)
 - Requests and Beautifulsoup (webscrapping)
 - SQLite (local databases)
+- winotify (desktop notifications)
