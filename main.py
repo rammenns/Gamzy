@@ -5,10 +5,13 @@ from socket import socket, AF_INET, SOCK_STREAM, error
 from PyQt5.QtWidgets import QApplication
 from UI import MainWindow
 
+oneinstance = None
+
 def uirun():
-    sock = socket(AF_INET, SOCK_STREAM)
+    global oneinstance
+    oneinstance = socket(AF_INET, SOCK_STREAM)
     try:
-        sock.bind(("127.0.0.1", 65432))
+        oneinstance.bind(("127.0.0.1", 65432))
         return False
     except error:
         return True
@@ -16,7 +19,7 @@ def uirun():
 def scriptrun():
 
     for p in psutil.process_iter(['name']):
-        if p.info['name'] and p.info['name'].lower() == "GamzScript.exe":
+        if p.info['name'] == "GamzScript.exe":
             return True
 
     return False
