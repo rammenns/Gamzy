@@ -1,6 +1,6 @@
 import sys
 from sqlite3 import connect
-from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy, QScrollArea, QPushButton, QProgressBar
+from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy, QScrollArea, QPushButton, QProgressBar, QCheckBox
 from PyQt5.QtGui import QIcon, QPixmap, QFontDatabase, QFont
 from PyQt5.QtCore import Qt, QTimer
 from webbrowser import open_new_tab
@@ -35,7 +35,8 @@ class updatebutton(QPushButton):
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.setFont(font)
         self.progress = QProgressBar(self)
-        self.progress.setGeometry(162, 75, 650, 25)
+        self.progress.setGeometry(125, 75, 650, 25)
+        self.progress.setTextVisible(False)
         self.progress.hide()
 
         self.setStyleSheet("""
@@ -149,7 +150,7 @@ class updatebutton(QPushButton):
                 None,
                 "runas",
                 updatepth(),
-                "/VERYSILENT /NORESTART",
+                "/SILENT /NORESTART",
                 None,
                 1
             )
@@ -231,7 +232,22 @@ class MainWindow(QMainWindow):
         central = QWidget()
         self.setCentralWidget(central)
 
+        namefont = QFontDatabase.addApplicationFont(pathfind("Minecraftia-Regular.ttf"))
+        fontfam = QFontDatabase.applicationFontFamilies(namefont)
+        if fontfam:
+            self.basefont = QFont(fontfam[0], 10)
+        else:
+            self.basefont = QFont("Arial", 10)
+
         layout = QVBoxLayout(central)
+
+        self.checkbox = QCheckBox("hide itch.io games", central)
+        self.checkbox.setFont(self.basefont)
+        self.checkbox.setCheckState(Qt.Checked)
+        self.checkbox.stateChanged.connect(self.checks)
+
+        layout.addSpacing(10)
+        layout.addWidget(self.checkbox)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
@@ -248,17 +264,10 @@ class MainWindow(QMainWindow):
         scroll.setWidget(scrollgamz)
         layout.addWidget(scroll)
 
-        namefont = QFontDatabase.addApplicationFont(pathfind("Minecraftia-Regular.ttf"))
-        fontfam = QFontDatabase.applicationFontFamilies(namefont)
-        if fontfam:
-            self.basefont = QFont(fontfam[0], 10)
-        else:
-            self.basefont = QFont("Arial", 10)
-
-        p = self.creategamz()
+        p = self.creategamz(self.checkbox.isChecked(), True)
 
         self.timer = QTimer(self)
-        self.timer.timeout.connect(self.creategamz)
+        self.timer.timeout.connect(lambda: self.creategamz(self.checkbox.isChecked(), True))
 
         if p:
             self.timer.start(3600000)
@@ -267,27 +276,45 @@ class MainWindow(QMainWindow):
 
         self.setStyleSheet ("""
             #window {background-color: #424242;}
+            QCheckBox {
+                margin-left: 20px;
+                color: white;
+            }
+            QCheckBox::indicator {
+                width: 30px;
+                height: 30px;
+            }
         """)
 
         scrollgamz.setStyleSheet("background-color: #424242;")
 
-    def creategamz(self):
+    def checks(self, state):
+        self.creategamz(state == Qt.Checked, False)
 
+    def creategamz(self, more, refr):
+
+        readd = None
         while self.scrolyout.count():
             item = self.scrolyout.takeAt(0)
             widget = item.widget()
             if widget:
+                if isinstance(widget, updatebutton):
+                    readd = widget
+                    continue
                 widget.deleteLater()
+        if readd:
+            self.scrolyout.addWidget(readd)
 
-        headers = {
-            "Accept": "application/vnd.github+json",
-            "User-Agent": "FreeGamz"
-        }
-        url = get("https://api.github.com/repos/rammenns/FreeGamz/releases/latest",headers = headers, timeout=5)
-        if url.status_code == 200:
-            ver = url.json()
-            if ver["tag_name"] != "1.3.1":
-                self.scrolyout.addWidget(updatebutton(self.basefont, ver["tag_name"]))
+        if refr and readd is None:
+            headers = {
+                "Accept": "application/vnd.github+json",
+                "User-Agent": "FreeGamz"
+            }
+            url = get("https://api.github.com/repos/rammenns/FreeGamz/releases/latest",headers = headers, timeout=5)
+            if url.status_code == 200:
+                ver = url.json()
+                if ver["tag_name"] != "1.4":
+                    self.scrolyout.addWidget(updatebutton(self.basefont, ver["tag_name"]))
 
         conn = None
         cursor = None
@@ -305,8 +332,11 @@ class MainWindow(QMainWindow):
             rows = []
 
         for link, image, name, platform in rows:
-            card = gamUI(link, image, name, platform, self.basefont)
-            self.scrolyout.addWidget(card)
+            if more and platform == "itchlogo.png":
+                break
+            else:
+                card = gamUI(link, image, name, platform, self.basefont)
+                self.scrolyout.addWidget(card)
 
         conn.close()
 
