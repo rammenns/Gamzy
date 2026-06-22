@@ -1,6 +1,6 @@
 import sys
 from sqlite3 import connect
-from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy, QScrollArea, QPushButton, QProgressBar, QCheckBox
+from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy, QScrollArea, QPushButton, QProgressBar, QCheckBox, QToolButton, QMenu, QWidgetAction
 from PyQt5.QtGui import QIcon, QPixmap, QFontDatabase, QFont
 from PyQt5.QtCore import Qt, QTimer
 from webbrowser import open_new_tab
@@ -241,15 +241,129 @@ class MainWindow(QMainWindow):
 
         layout = QVBoxLayout(central)
 
-        self.checkbox = QCheckBox("hide itch.io games", central)
-        self.checkbox.setFont(self.basefont)
-        self.checkbox.setCheckState(Qt.Checked)
-        self.checkbox.stateChanged.connect(self.checks)
+        checkpth = None
+        conncheck = None
+        try:
+            checkpth = os.path.join(dr(), "check.db")
+            conncheck = connect(checkpth, timeout = 180)
+            chk = conncheck.cursor()
+        except:
+            return
 
-        layout.addSpacing(10)
-        layout.addWidget(self.checkbox)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
+        chk.execute("""
+        CREATE TABLE IF NOT EXISTS checks(
+            platform TEXT UNIQUE PRIMARY KEY,
+            hide BOOLEAN DEFAULT 0,
+            silence BOOLEAN DEFAULT 0
+        )
+        """)
+        conncheck.commit()
+
+        chk.execute("SELECT platform, hide, silence FROM checks")
+        rows = chk.fetchall()
+
+        if not rows:
+            chk.execute("INSERT INTO checks(platform) VALUES (?)", ("Steam",))
+            chk.execute("INSERT INTO checks(platform) VALUES (?)", ("Epic",))
+            chk.execute("INSERT INTO checks(platform) VALUES (?)", ("GOG",))
+            chk.execute("INSERT INTO checks(platform) VALUES (?)", ("itch.io",))
+            conncheck.commit()
+
+            chk.execute("SELECT platform, hide, silence FROM checks")
+            rows = chk.fetchall()
+
+        self.hidedropdown = QToolButton()
+        self.hidedropdown.setText("Hide    >")
+
+        self.sildropdown = QToolButton()
+        self.sildropdown.setText("Silence  >")
+
+        checks = QHBoxLayout()
+        checks.addWidget(self.hidedropdown)
+        checks.addWidget(self.sildropdown)
+        layout.addLayout(checks)
+
+        presets = {}
+
+        for platform, hide, silence in rows:
+            presets[platform] = {
+                "hide": hide,
+                "silence": silence
+            }
+
+        hidemenu = QMenu(self)
+
+        hidemenu.aboutToShow.connect(lambda: self.hidedropdown.setText("Hide    v"))
+        hidemenu.aboutToHide.connect(lambda: self.hidedropdown.setText("Hide    >"))
+
+        hidesteam = QCheckBox("Steam")
+        hidesteam.setChecked(presets.get("Steam", {}).get("hide", False))
+        steamhide_action = QWidgetAction(self)
+        steamhide_action.setDefaultWidget(hidesteam)
+        hidemenu.addAction(steamhide_action)
+        hidesteam.toggled.connect(lambda checked: self.togg("Steam", True, checked))
+
+        hideepic = QCheckBox("Epic")
+        hideepic.setChecked(presets.get("Epic", {}).get("hide", False))
+        epichide_action = QWidgetAction(self)
+        epichide_action.setDefaultWidget(hideepic)
+        hidemenu.addAction(epichide_action)
+        hideepic.toggled.connect(lambda checked: self.togg("Epic", True, checked))
+
+        hidegog = QCheckBox("GOG")
+        hidegog.setChecked(presets.get("GOG", {}).get("hide", False))
+        goghide_action = QWidgetAction(self)
+        goghide_action.setDefaultWidget(hidegog)
+        hidemenu.addAction(goghide_action)
+        hidegog.toggled.connect(lambda checked: self.togg("GOG", True, checked))
+
+        hideitch = QCheckBox("itch.io")
+        hideitch.setChecked(presets.get("itch.io", {}).get("hide", False))
+        itchhide_action = QWidgetAction(self)
+        itchhide_action.setDefaultWidget(hideitch)
+        hidemenu.addAction(itchhide_action)
+        hideitch.toggled.connect(lambda checked: self.togg("itch.io", True, checked))
+
+        silmenu = QMenu(self)
+
+        silmenu.aboutToShow.connect(lambda: self.sildropdown.setText("Silence  v"))
+        silmenu.aboutToHide.connect(lambda: self.sildropdown.setText("Silence  >"))
+
+        silsteam = QCheckBox("Steam")
+        silsteam.setChecked(presets.get("Steam", {}).get("silence", False))
+        steamsil_action = QWidgetAction(self)
+        steamsil_action.setDefaultWidget(silsteam)
+        silmenu.addAction(steamsil_action)
+        silsteam.toggled.connect(lambda checked: self.togg("Steam", False, checked))
+
+        silepic = QCheckBox("Epic")
+        silepic.setChecked(presets.get("Epic", {}).get("silence", False))
+        epicsil_action = QWidgetAction(self)
+        epicsil_action.setDefaultWidget(silepic)
+        silmenu.addAction(epicsil_action)
+        silepic.toggled.connect(lambda checked: self.togg("Epic", False, checked))
+
+        silgog = QCheckBox("GOG")
+        silgog.setChecked(presets.get("GOG", {}).get("silence", False))
+        gogsil_action = QWidgetAction(self)
+        gogsil_action.setDefaultWidget(silgog)
+        silmenu.addAction(gogsil_action)
+        silgog.toggled.connect(lambda checked: self.togg("GOG", False, checked))
+
+        silitch = QCheckBox("itch.io")
+        silitch.setChecked(presets.get("itch.io", {}).get("silence", False))
+        itchsil_action = QWidgetAction(self)
+        itchsil_action.setDefaultWidget(silitch)
+        silmenu.addAction(itchsil_action)
+        silitch.toggled.connect(lambda checked: self.togg("itch.io", False, checked))
+
+        conncheck.close()
+
+        self.hidedropdown.setMenu(hidemenu)
+        self.hidedropdown.setPopupMode(QToolButton.InstantPopup)
+
+        self.sildropdown.setMenu(silmenu)
+        self.sildropdown.setPopupMode(QToolButton.InstantPopup)
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -264,10 +378,10 @@ class MainWindow(QMainWindow):
         scroll.setWidget(scrollgamz)
         layout.addWidget(scroll)
 
-        p = self.creategamz(self.checkbox.isChecked(), True)
+        p = self.creategamz(True)
 
         self.timer = QTimer(self)
-        self.timer.timeout.connect(lambda: self.creategamz(self.checkbox.isChecked(), True))
+        self.timer.timeout.connect(lambda: self.creategamz(True))
 
         if p:
             self.timer.start(3600000)
@@ -276,22 +390,60 @@ class MainWindow(QMainWindow):
 
         self.setStyleSheet ("""
             #window {background-color: #424242;}
-            QCheckBox {
-                margin-left: 20px;
+            QToolButton {
+                width: 140px;
+                height: 40px;
+                font-family: Minecraftia;
+                font-size: 10pt;
+                background-color: transparent;
+                border: none;
                 color: white;
             }
+            QToolButton:hover{
+                background-color: transparent;
+                border: none;
+                color: white;
+            }
+            QToolButton::menu-indicator {
+                image: none;
+            }
+            QCheckBox {
+                font-family: Minecraftia;
+                font-size: 20px;
+            }
             QCheckBox::indicator {
-                width: 30px;
-                height: 30px;
+                width: 24px;
+                height: 24px;
+            }
+            QMenu {
+                font-family: Minecraftia;
+                font-size: 10pt;
+                width: 140px;
+            }
+            QAction::indicator {
+                width: 40px;
+                height: 40px;
             }
         """)
 
         scrollgamz.setStyleSheet("background-color: #424242;")
 
-    def checks(self, state):
-        self.creategamz(state == Qt.Checked, False)
 
-    def creategamz(self, more, refr):
+    def togg(self, plat, wh, ch):
+        checkpth = os.path.join(dr(), "check.db")
+        conncheck = connect(checkpth, timeout = 180)
+        chk = conncheck.cursor()
+        if wh:
+            chk.execute("UPDATE checks SET hide = ? WHERE platform = ?", (ch, plat))
+        else:
+            chk.execute("UPDATE checks SET silence = ? WHERE platform = ?", (ch, plat))
+        conncheck.commit()
+        conncheck.close()
+
+        if wh:
+            self.creategamz(False)
+
+    def creategamz(self, refr):
 
         readd = None
         while self.scrolyout.count():
@@ -313,8 +465,22 @@ class MainWindow(QMainWindow):
             url = get("https://api.github.com/repos/rammenns/FreeGamz/releases/latest",headers = headers, timeout=5)
             if url.status_code == 200:
                 ver = url.json()
-                if ver["tag_name"] != "1.4":
+                if ver["tag_name"] != "1.5":
                     self.scrolyout.addWidget(updatebutton(self.basefont, ver["tag_name"]))
+
+        checkpth = os.path.join(dr(), "check.db")
+        conncheck = connect(checkpth, timeout = 180)
+        chk = conncheck.cursor()
+
+        chk.execute("SELECT hide FROM checks")
+        rows = chk.fetchall()
+        conncheck.close()
+
+        sthide = rows[0][0]
+        ephide = rows[1][0]
+        goghide = rows[2][0]
+        ithide = rows[3][0]
+
 
         conn = None
         cursor = None
@@ -331,12 +497,19 @@ class MainWindow(QMainWindow):
         except:
             rows = []
 
+
         for link, image, name, platform in rows:
-            if more and platform == "itchlogo.png":
+            if platform == "steamlogo.png" and sthide:
+                continue
+            elif platform == "epiclogo.png" and ephide:
+                continue
+            elif platform == "goglogo.png" and goghide:
+                continue
+            elif platform == "itchlogo.png" and ithide:
                 break
-            else:
-                card = gamUI(link, image, name, platform, self.basefont)
-                self.scrolyout.addWidget(card)
+            card = gamUI(link, image, name, platform, self.basefont)
+            self.scrolyout.addWidget(card)
+
 
         conn.close()
 
