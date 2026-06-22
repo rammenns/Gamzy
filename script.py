@@ -69,17 +69,47 @@ def mainscript(gmz, conngmz):
             else:
                 gmz.execute("DELETE FROM games")
 
-            added = False
+
+            silencedones = []
             for test in range(len(links)):
                 gmz.execute(
                     "INSERT OR IGNORE INTO games (link, name, image, platform) VALUES (?, ?, ?, ?)",
                     (links[test], names[test], imgs[test], platforms[test])
                 )
                 if gmz.rowcount > 0:
-                    added = True
+                    if platforms[test] not in silencedones:
+                        silencedones.append(platforms[test])
             conngmz.commit()
 
-            if added:
+            checkpth = None
+            conncheck = None
+            chk = None
+            try:
+                checkpth = os.path.join(dr(), "check.db")
+                conncheck = connect(checkpth, timeout = 10)
+                chk = conncheck.cursor()
+            except:
+                pass
+
+            thisissil = None
+            if chk:
+                chk.execute("SELECT silence FROM checks")
+                rows = chk.fetchall()
+                conncheck.close()
+
+                thisissil = 0
+
+                if "steamlogo.png" in silencedones:
+                    thisissil += rows[0][0]
+                if "epiclogo.png" in silencedones:
+                    thisissil += rows[1][0]
+                if "goglogo.png" in silencedones:
+                    thisissil += rows[2][0]
+                if "itchlogo.png" in silencedones:
+                    thisissil += rows[3][0]
+
+
+            if thisissil is None or thisissil < len(silencedones):
                 if getattr(sys, "frozen", False):
                     base = sys._MEIPASS
                 else:
@@ -148,39 +178,35 @@ def mainscript(gmz, conngmz):
                     if price:
                         price = price.find('div', class_="discount_block search_discount_block")
                     if price:
-                        pricep = price.find('div', class_="discount_pct")
+                        price = price.find('div', class_="discount_prices generic_discount")
+                    if price:
+                        price = price.find('div', class_="discount_final_price")
 
-                    if pricep and pricep.text == "-100%":
+                    if price and "0,00" in price.text:
 
-                        price = price.find('div', class_="discount_prices")
-                        if price:
-                            price = price.find('div', class_="discount_final_price")
+                        links.append(gam['href'])
+                        nam = gam['href'].split('/')[-2].replace('_', ' ')
+                        names.append(nam)
+                        gamm = gam['href']
 
-                        if price and price.text == "0,00€":
+                        try:
+                            gam = gam.find('div', class_= "search_capsule")
+                            if gam:
+                                gam = gam.find('img')
+                            url = gam.get('src')
+                            if not url:
+                                continue
+                            ext = os.path.splitext(url)[1].split("?")[0]
+                            file = os.path.join(dr(), f"gamzimgs/{namecut(nam)}{ext}")
+                            if not exists(file):
+                                gamimg = get(url, timeout = 5).content
+                                with open(file, "wb") as f:
+                                    f.write(gamimg)
+                            imgs.append(file)
+                        except:
+                            imgs.append("steamlogo.png")
 
-                            links.append(gam['href'])
-                            nam = gam['href'].split('/')[-2].replace('_', ' ')
-                            names.append(nam)
-                            gamm = gam['href']
-
-                            try:
-                                gam = gam.find('div', class_= "search_capsule")
-                                if gam:
-                                    gam = gam.find('img')
-                                url = gam.get('src')
-                                if not url:
-                                    continue
-                                ext = os.path.splitext(url)[1].split("?")[0]
-                                file = os.path.join(dr(), f"gamzimgs/{namecut(nam)}{ext}")
-                                if not exists(file):
-                                    gamimg = get(url, timeout = 5).content
-                                    with open(file, "wb") as f:
-                                        f.write(gamimg)
-                                imgs.append(file)
-                            except:
-                                imgs.append("steamlogo.png")
-
-                            platforms.append("steamlogo.png")
+                        platforms.append("steamlogo.png")
 
             print("Steam scrapping     \033[92m SUCCESS \033[0m")
 
@@ -399,7 +425,6 @@ def main():
 
     try:
         safepth = os.path.join(dr(), "safe.db")
-        print("safe =", safepth)
         connsafe = connect(safepth)
         safe = connsafe.cursor()
         safe.execute("CREATE TABLE IF NOT EXISTS safety (safe BOOLEAN)")
