@@ -1,5 +1,4 @@
 from sqlite3 import connect
-from requests import get, Session
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta, timezone
 from random import uniform
@@ -8,6 +7,9 @@ import os
 from os.path import exists
 from winotify import Notification, audio
 import sys
+import httpx
+import asyncio
+from requests import Session, get
 
 def dr():
     if getattr(sys, "frozen", False):
@@ -18,7 +20,7 @@ def namecut(nam):
     inval = '<>:"/\\|?*'
     return ''.join(c for c in nam if c not in inval).strip()
 
-def mainscript(gmz, conngmz):
+async def mainscript(gmz, conngmz):
 
     try:
 
@@ -159,64 +161,68 @@ def mainscript(gmz, conngmz):
 
         #Steam Search
 
-        if True:
+        steamlinks = []
+        steamnames = []
+        steamimgs = []
+        steamplatforms = []
+
+        async def steamscrap():
 
             print("\033[1m Requesting Steam URL: \033[0m")
 
             try:
 
-                with Session() as steam:
+                async with httpx.AsyncClient(headers = headers, timeout = 5, follow_redirects = True) as steam:
 
-                    steam.headers.update(headers)
+                    response = await steam.get("https://store.steampowered.com/search?maxprice=free&supportedlang=english&specials=1&ndl=1")
 
-                    response = steam.get("https://store.steampowered.com/search?maxprice=free&supportedlang=english&specials=1&ndl=1", timeout = 5)
+                    response.raise_for_status()
 
                     print("Steam request       \033[92m SUCCESS \033[0m")
 
-                    if response.status_code == 200:
+                    soup = BeautifulSoup(response.text,'html.parser')
 
-                        soup = BeautifulSoup(response.text,'html.parser')
+                    for gam in soup.find_all('a', class_="search_result_row ds_collapse_flag"):
 
-                        for gam in soup.find_all('a', class_="search_result_row ds_collapse_flag"):
+                        price = gam
+                        if price:
+                            price = price.find('div', class_="responsive_search_name_combined")
+                        if price:
+                            price = price.find('div', class_="search_price_discount_combined responsive_secondrow")
+                        if price:
+                            price = price.find('div', class_="search_discount_and_price responsive_secondrow")
+                        if price:
+                            price = price.find('div', class_="discount_block search_discount_block")
+                        if price:
+                            price = price.find('div', class_="discount_prices generic_discount")
+                        if price:
+                            price = price.find('div', class_="discount_final_price")
 
-                            price = gam
-                            if price:
-                                price = price.find('div', class_="responsive_search_name_combined")
-                            if price:
-                                price = price.find('div', class_="search_price_discount_combined responsive_secondrow")
-                            if price:
-                                price = price.find('div', class_="search_discount_and_price responsive_secondrow")
-                            if price:
-                                price = price.find('div', class_="discount_block search_discount_block")
-                            if price:
-                                price = price.find('div', class_="discount_prices generic_discount")
-                            if price:
-                                price = price.find('div', class_="discount_final_price")
+                        if price and "0,00" in price.text:
 
-                            if price and "0,00" in price.text:
+                            steamlinks.append(gam['href'])
+                            nam = gam['href'].split('/')[-2].replace('_', ' ')
+                            steamnames.append(nam)
 
-                                links.append(gam['href'])
-                                nam = gam['href'].split('/')[-2].replace('_', ' ')
-                                names.append(nam)
+                            try:
+                                gam = gam.find('div', class_= "search_capsule")
+                                if gam:
+                                    gam = gam.find('img')
+                                url = gam.get('src')
+                                if not url:
+                                    continue
+                                ext = os.path.splitext(url)[1].split("?")[0]
+                                file = os.path.join(dr(), f"gamzimgs/{namecut(nam)}{ext}")
+                                if not exists(file):
+                                    imgresp = await steam.get(url)
+                                    imgresp.raise_for_status()
+                                    with open(file, "wb") as f:
+                                        f.write(imgresp.content)
+                                steamimgs.append(file)
+                            except:
+                                steamimgs.append("steamlogo.png")
 
-                                try:
-                                    gam = gam.find('div', class_= "search_capsule")
-                                    if gam:
-                                        gam = gam.find('img')
-                                    url = gam.get('src')
-                                    if not url:
-                                        continue
-                                    ext = os.path.splitext(url)[1].split("?")[0]
-                                    file = os.path.join(dr(), f"gamzimgs/{namecut(nam)}{ext}")
-                                    if not exists(file):
-                                        gamimg = steam.get(url, timeout = 5).content
-                                        with open(file, "wb") as f:
-                                            f.write(gamimg)
-                                    imgs.append(file)
-                                except:
-                                    imgs.append("steamlogo.png")
-
-                                platforms.append("steamlogo.png")
+                            steamplatforms.append("steamlogo.png")
 
                     print("Steam scrapping     \033[92m SUCCESS \033[0m")
 
@@ -230,55 +236,59 @@ def mainscript(gmz, conngmz):
 
         #GOG Search
 
-        if True:
+        goglinks = []
+        gognames = []
+        gogimgs = []
+        gogplatforms = []
+
+        async def gogscrap():
 
             print("\033[1m Requesting GOG URL: \033[0m")
 
             try:
 
-                with Session() as gog:
+                async with httpx.AsyncClient(headers = headers, timeout = 5, follow_redirects = True) as gog:
 
-                    gog.headers.update(headers)
+                    response = await gog.get("https://www.gog.com/en/")
 
-                    response = gog.get("https://www.gog.com/en/", timeout=5)
+                    response.raise_for_status()
 
                     print("GOG request         \033[92m SUCCESS \033[0m")
 
-                    if response.status_code == 200:
+                    soup = BeautifulSoup(response.text,'html.parser')
 
-                        soup = BeautifulSoup(response.text,'html.parser')
+                    for link in soup.find_all('div', class_="giveaway ng-star-inserted"):
 
-                        for link in soup.find_all('div', class_="giveaway ng-star-inserted"):
+                        sure = True
+                        if link.find('a', class_="giveaway__overlay-link"):
+                            gam = link.find('a', class_="giveaway__overlay-link")
+                            goglinks.append(gam['href'])
+                            gamn = gam
+                            if gam:
+                                gam = gam.get('href')
+                            if gam:
+                                gam = gam.rstrip('/').split('/')[-1]
+                            if gam:
+                                nam = gam.replace('_', ' ').title()
+                            gognames.append(nam)
+                            gam = gamn.find('store-picture')
+                            if gam:
+                                gam = gam.find('picture')
+                            if gam:
+                                gam = gam.find('source')
+                            url = gam['srcset'].split(", ")[1].rsplit(" ", 1)[0]
+                            if not url:
+                                continue
+                            ext = os.path.splitext(url)[1].split("?")[0]
+                            file = os.path.join(dr(), f"gamzimgs/{namecut(nam)}{ext}")
+                            if not exists(file):
+                                imgresp = await gog.get(url)
+                                imgresp.raise_for_status()
+                                with open(file, "wb") as f:
+                                    f.write(imgresp.content)
+                            gogimgs.append(file)
 
-                            sure = True
-                            if link.find('a', class_="giveaway__overlay-link"):
-                                gam = link.find('a', class_="giveaway__overlay-link")
-                                links.append(gam['href'])
-                                gamn = gam
-                                if gam:
-                                    gam = gam.get('href')
-                                if gam:
-                                    gam = gam.rstrip('/').split('/')[-1]
-                                if gam:
-                                    nam = gam.replace('_', ' ').title()
-                                names.append(nam)
-                                gam = gamn.find('store-picture')
-                                if gam:
-                                    gam = gam.find('picture')
-                                if gam:
-                                    gam = gam.find('source')
-                                url = gam['srcset'].split(", ")[1].rsplit(" ", 1)[0]
-                                if not url:
-                                    continue
-                                ext = os.path.splitext(url)[1].split("?")[0]
-                                file = os.path.join(dr(), f"gamzimgs/{namecut(nam)}{ext}")
-                                if not exists(file):
-                                    gamimg = gog.get(url, timeout = 5).content
-                                    with open(file, "wb") as f:
-                                        f.write(gamimg)
-                                imgs.append(file)
-
-                                platforms.append("goglogo.png")
+                            gogplatforms.append("goglogo.png")
 
                 print("GOG scrapping       \033[92m SUCCESS \033[0m")
 
@@ -293,7 +303,12 @@ def mainscript(gmz, conngmz):
 
         #Epic Search
 
-        if True:
+        epiclinks = []
+        epicnames = []
+        epicimgs = []
+        epicplatforms = []
+
+        def epicscrap():
 
             print("\033[1m Requesting EpicGames URL: \033[0m")
 
@@ -312,42 +327,43 @@ def mainscript(gmz, conngmz):
 
                     response = epic.get("https://store.epicgames.com/graphql?operationName=searchStoreQuery&variables={%22allowCountries%22:%22RO%22,%22category%22:%22games/edition/base|games/edition|bundles/games|addons%22,%22count%22:40,%22country%22:%22RO%22,%22effectiveDate%22:%22[,2026-06-23T13:14:01.462Z]%22,%22keywords%22:%22%22,%22locale%22:%22en-US%22,%22onSale%22:true,%22sortBy%22:%22currentPrice%22,%22sortDir%22:%22ASC%22,%22tag%22:%22%22,%22withPrice%22:true}&extensions={%22persistedQuery%22:{%22version%22:1,%22sha256Hash%22:%2229d49ab31d438cd90be2d554d2d54704951e4223a8fcd290fcf68308841a1979%22}}", timeout = 5)
 
+                    response.raise_for_status()
+
                     print("EpicGames request   \033[92m SUCCESS \033[0m")
 
-                    if response.status_code == 200:
+                    data = response.json()
 
-                        data = response.json()
+                    for gam in data["data"]["Catalog"]["searchStore"]["elements"]:
 
-                        for gam in data["data"]["Catalog"]["searchStore"]["elements"]:
-
-                            if gam["price"]:
-                                gamn = gam["price"]
-                                if gamn["totalPrice"]:
-                                    gamn = gamn["totalPrice"]
-                                    if gamn["discountPrice"] == gamn["voucherDiscount"] and gamn["originalPrice"] == gamn["discount"]:
-                                        if gam["catalogNs"]:
-                                            gamn = gam["catalogNs"]
-                                            if gamn["mappings"][0]:
-                                                gamn = gamn["mappings"][0]
-                                                if gamn["pageSlug"]:
-                                                    links.append(f"https://store.epicgames.com/en-US/p/{gamn['pageSlug']}")
-                                                    if gam["title"]:
-                                                        nam = gam["title"]
-                                                        names.append(nam)
-                                                        if gam["keyImages"][0]["url"]:
-                                                            url = gam["keyImages"][0]["url"]
-                                                            ext = os.path.splitext(url)[1].split("?")[0]
-                                                            if not ext:
-                                                                ext = ".png"
-                                                            file = os.path.join(dr(), f"gamzimgs/{namecut(nam)}{ext}")
-                                                            if not exists(file):
-                                                                gamimg = epic.get(url, timeout=5).content
-                                                                with open(file, "wb") as f:
-                                                                    f.write(gamimg)
-                                                            imgs.append(file)
-                                                            platforms.append("epiclogo.png")
-                                    else:
-                                        break
+                        if gam["price"]:
+                            gamn = gam["price"]
+                            if gamn["totalPrice"]:
+                                gamn = gamn["totalPrice"]
+                                if gamn["discountPrice"] == gamn["voucherDiscount"] and gamn["originalPrice"] == gamn["discount"]:
+                                    if gam["catalogNs"]:
+                                        gamn = gam["catalogNs"]
+                                        if gamn["mappings"][0]:
+                                            gamn = gamn["mappings"][0]
+                                            if gamn["pageSlug"]:
+                                                epiclinks.append(f"https://store.epicgames.com/en-US/p/{gamn['pageSlug']}")
+                                                if gam["title"]:
+                                                    nam = gam["title"]
+                                                    epicnames.append(nam)
+                                                    if gam["keyImages"][0]["url"]:
+                                                        url = gam["keyImages"][0]["url"]
+                                                        ext = os.path.splitext(url)[1].split("?")[0]
+                                                        if not ext:
+                                                            ext = ".png"
+                                                        file = os.path.join(dr(), f"gamzimgs/{namecut(nam)}{ext}")
+                                                        if not exists(file):
+                                                            imgresp = epic.get(url)
+                                                            imgresp.raise_for_status()
+                                                            with open(file, "wb") as f:
+                                                                f.write(imgresp.content)
+                                                        epicimgs.append(file)
+                                                        epicplatforms.append("epiclogo.png")
+                                else:
+                                    break
 
                     print("EpicGames scrapping \033[92m SUCCESS \033[0m")
 
@@ -361,13 +377,18 @@ def mainscript(gmz, conngmz):
 
         #itch.io search
 
-        if True:
+        itchlinks = []
+        itchnames = []
+        itchimgs = []
+        itchplatforms = []
+
+        async def itchscrap():
 
             print("\033[1m Requesting itch.io URL: \033[0m")
 
             try:
 
-                with Session() as itch:
+                async with httpx.AsyncClient(timeout = 5, follow_redirects = True) as itch:
 
                     headers = {
                         "Accept": "*/*",
@@ -381,57 +402,57 @@ def mainscript(gmz, conngmz):
 
                     p = 1
 
-                    response = itch.get(f"https://itch.io/games/on-sale?page={p}&format=json", timeout = 5)
+                    response = await itch.get(f"https://itch.io/games/on-sale?page={p}&format=json")
+
+                    response.raise_for_status()
 
                     data = response.json()
                     soup = BeautifulSoup(data["content"], "html.parser")
 
-                    if response.status_code == 200:
+                    print("itch.io request     \033[92m SUCCESS \033[0m")
 
-                        print("itch.io request     \033[92m SUCCESS \033[0m")
+                    while data["content"]:
 
-                        while data["content"]:
+                        for gam in soup.find_all('div', class_="game_cell"):
 
-                            if response.status_code == 200:
+                            if gam:
+                                gamn = gam.find('div', class_="game_thumb")
+                                gam = gam.find('div', class_="game_cell_data")
+                            if gam:
+                                gam = gam.find('div', class_="game_title")
+                            if gam:
+                                nam = gam.find('a' , class_="title game_link").text
+                                gam = gam.find('a', class_="price_tag meta_tag sale")
+                            if gam:
+                                price = gam.find('div', class_="price_value")
+                                sale = gam.find('div', class_="sale_tag")
 
-                                for gam in soup.find_all('div', class_="game_cell"):
+                            if (price and sale and price.text == "$0" and sale.text == "-100%"):
+                                if gamn:
+                                    gamn = gamn.find('a', class_="thumb_link game_link")
+                                itchlinks.append(gamn['href'])
+                                itchnames.append(nam)
+                                if gamn:
+                                    gamn = gamn.find('img', class_="lazy_loaded")
+                                url = gamn.get("data-lazy_src")
+                                if not url:
+                                    continue
+                                ext = os.path.splitext(url)[1].split("?")[0]
+                                file = os.path.join(dr(), f"gamzimgs/{namecut(nam)}{ext}")
+                                if not exists(file):
+                                    imgresp = await itch.get(url)
+                                    imgresp.raise_for_status()
+                                    with open(file, "wb") as f:
+                                        f.write(imgresp.content)
+                                itchimgs.append(file)
+                                itchplatforms.append("itchlogo.png")
 
-                                    if gam:
-                                        gamn = gam.find('div', class_="game_thumb")
-                                        gam = gam.find('div', class_="game_cell_data")
-                                    if gam:
-                                        gam = gam.find('div', class_="game_title")
-                                    if gam:
-                                        nam = gam.find('a' , class_="title game_link").text
-                                        gam = gam.find('a', class_="price_tag meta_tag sale")
-                                    if gam:
-                                        price = gam.find('div', class_="price_value")
-                                        sale = gam.find('div', class_="sale_tag")
-
-                                    if (price and sale and price.text == "$0" and sale.text == "-100%"):
-                                        if gamn:
-                                            gamn = gamn.find('a', class_="thumb_link game_link")
-                                        links.append(gamn['href'])
-                                        names.append(nam)
-                                        if gamn:
-                                            gamn = gamn.find('img', class_="lazy_loaded")
-                                        url = gamn.get("data-lazy_src")
-                                        if not url:
-                                            continue
-                                        ext = os.path.splitext(url)[1].split("?")[0]
-                                        file = os.path.join(dr(), f"gamzimgs/{namecut(nam)}{ext}")
-                                        if not exists(file):
-                                            gamimg = itch.get(url, timeout=5).content
-                                            with open(file, "wb") as f:
-                                                f.write(gamimg)
-                                        imgs.append(file)
-                                        platforms.append("itchlogo.png")
-
-                            sleep(uniform(0.3, 0.8))
-                            p += 1
-                            response = itch.get(f"https://itch.io/games/on-sale?page={p}&format=json", timeout=5)
-                            data = response.json()
-                            soup = BeautifulSoup(data["content"], "html.parser")
+                        await asyncio.sleep(uniform(0.3, 0.8))
+                        p += 1
+                        response = await itch.get(f"https://itch.io/games/on-sale?page={p}&format=json")
+                        response.raise_for_status()
+                        data = response.json()
+                        soup = BeautifulSoup(data["content"], "html.parser")
 
                     print("itch.io scrapping   \033[92m SUCCESS \033[0m")
 
@@ -441,7 +462,34 @@ def mainscript(gmz, conngmz):
 
             print("")
 
-        insertnremove(links, names, imgs, platforms, fail)
+        await asyncio.gather(
+            steamscrap(),
+            gogscrap(),
+            itchscrap(),
+            asyncio.to_thread(epicscrap)
+        )
+
+        links.extend(steamlinks)
+        links.extend(epiclinks)
+        links.extend(goglinks)
+        links.extend(itchlinks)
+
+        names.extend(steamnames)
+        names.extend(epicnames)
+        names.extend(gognames)
+        names.extend(itchnames)
+
+        imgs.extend(steamimgs)
+        imgs.extend(epicimgs)
+        imgs.extend(gogimgs)
+        imgs.extend(itchimgs)
+
+        platforms.extend(steamplatforms)
+        platforms.extend(epicplatforms)
+        platforms.extend(gogplatforms)
+        platforms.extend(itchplatforms)
+
+        insertnremove()
 
         return True
 
@@ -522,7 +570,7 @@ def main():
 
             try:
 
-                get("https://1.1.1.1", timeout = 5)
+                httpx.get("https://1.1.1.1", timeout=5)
 
                 if now >= row[0]:
 
@@ -531,7 +579,7 @@ def main():
                         conngmz = connect(gamespth, timeout=10)
                         gmz = conngmz.cursor()
 
-                        if mainscript(gmz, conngmz):
+                        if asyncio.run(mainscript(gmz, conngmz)):
 
                             counting = 1
                             gmz.execute("SELECT link, image, name, platform FROM games")
@@ -541,7 +589,8 @@ def main():
 
                     finally:
 
-                        conngmz.close()
+                        if conngmz:
+                            conngmz.close()
 
                     pause = timedelta(hours=uniform(12, 24))
                     tmr.execute("UPDATE timer SET nextupdate = ?", (now + pause.total_seconds(),))
