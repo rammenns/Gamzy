@@ -418,34 +418,43 @@ async def mainscript(gmz, conngmz):
                             if gam:
                                 gamn = gam.find('div', class_="game_thumb")
                                 gam = gam.find('div', class_="game_cell_data")
-                            if gam:
-                                gam = gam.find('div', class_="game_title")
-                            if gam:
-                                nam = gam.find('a' , class_="title game_link").text
-                                gam = gam.find('a', class_="price_tag meta_tag sale")
-                            if gam:
-                                price = gam.find('div', class_="price_value")
-                                sale = gam.find('div', class_="sale_tag")
+                                if gam and gamn:
+                                    gam = gam.find('div', class_="game_title")
+                                    if gam:
+                                        nam = gam.find('a' , class_="title game_link").text
+                                        gam = gam.find('a', class_="price_tag meta_tag sale")
+                                        if gam:
+                                            price = gam.find('div', class_="price_value")
+                                            sale = gam.find('div', class_="sale_tag")
 
-                            if (price and sale and price.text == "$0" and sale.text == "-100%"):
-                                if gamn:
-                                    gamn = gamn.find('a', class_="thumb_link game_link")
-                                itchlinks.append(gamn['href'])
-                                itchnames.append(nam)
-                                if gamn:
-                                    gamn = gamn.find('img', class_="lazy_loaded")
-                                url = gamn.get("data-lazy_src")
-                                if not url:
-                                    continue
-                                ext = os.path.splitext(url)[1].split("?")[0]
-                                file = os.path.join(dr(), f"gamzimgs/{namecut(nam)}{ext}")
-                                if not exists(file):
-                                    imgresp = await itch.get(url)
-                                    imgresp.raise_for_status()
-                                    with open(file, "wb") as f:
-                                        f.write(imgresp.content)
-                                itchimgs.append(file)
-                                itchplatforms.append("itchlogo.png")
+                                            if (price and sale and price.text == "$0" and sale.text == "-100%"):
+                                                gamn = gamn.find('a', class_="thumb_link game_link")
+                                                if gamn:
+                                                    hrf = gamn.get("href")
+                                                    if hrf:
+                                                        itchlinks.append(hrf)
+                                                        if nam:
+                                                            itchnames.append(nam)
+                                                        else:
+                                                            itchnames.append("")
+                                                        if gamn:
+                                                            gamn = gamn.find('img', class_="lazy_loaded")
+                                                            if gamn:
+                                                                url = gamn.get("data-lazy_src")
+                                                                if url:
+                                                                    ext = os.path.splitext(url)[1].split("?")[0]
+                                                                    file = os.path.join(dr(), f"gamzimgs/{namecut(nam)}{ext}")
+                                                                    if not exists(file):
+                                                                        imgresp = await itch.get(url)
+                                                                        imgresp.raise_for_status()
+                                                                        with open(file, "wb") as f:
+                                                                            f.write(imgresp.content)
+                                                                    itchimgs.append(file)
+                                                                else:
+                                                                    itchimgs.append("")
+                                                            else:
+                                                                itchimgs.append("")
+                                                        itchplatforms.append("itchlogo.png")
 
                         await asyncio.sleep(uniform(0.3, 0.8))
                         p += 1
