@@ -465,7 +465,7 @@ class MainWindow(QMainWindow):
             url = get("https://api.github.com/repos/rammenns/FreeGamz/releases/latest",headers = headers, timeout=5)
             if url.status_code == 200:
                 ver = url.json()
-                if ver["tag_name"] != "1.6":
+                if ver["tag_name"] != "1.6.1":
                     self.scrolyout.addWidget(updatebutton(self.basefont, ver["tag_name"]))
 
         checkpth = os.path.join(dr(), "check.db")
