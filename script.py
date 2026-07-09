@@ -10,6 +10,7 @@ import sys
 import httpx
 import asyncio
 from requests import Session, get
+import json
 
 def dr():
     if getattr(sys, "frozen", False):
@@ -83,9 +84,6 @@ async def mainscript(gmz, conngmz):
                         silencedones.append(platforms[test])
             conngmz.commit()
 
-            checkpth = None
-            conncheck = None
-            chk = None
             try:
                 checkpth = os.path.join(dr(), "check.db")
                 conncheck = connect(checkpth, timeout = 10)
@@ -255,14 +253,14 @@ async def mainscript(gmz, conngmz):
 
                     soup = BeautifulSoup(response.text,'html.parser')
 
-                    for link in soup.find_all('div', class_="giveaway ng-star-inserted"):
+                    for link in soup.find_all('div', class_="giveaway"):
 
                         gam = link.find('a', class_="giveaway__overlay-link")
+                        gamn = link.find('div', class_="giveaway__image")
                         if gam:
                             hrf = gam.get('href')
                             if hrf:
                                 goglinks.append(hrf)
-                                gamn = gam
                                 gam = hrf.rstrip('/').split('/')[-1]
                                 nam = gam.replace('_', ' ').title()
                                 gognames.append(nam)
@@ -322,7 +320,32 @@ async def mainscript(gmz, conngmz):
 
                     epic.headers.update(headers)
 
-                    response = epic.get("https://store.epicgames.com/graphql?operationName=searchStoreQuery&variables={%22allowCountries%22:%22RO%22,%22category%22:%22games/edition/base|games/edition|bundles/games|addons%22,%22count%22:40,%22country%22:%22RO%22,%22effectiveDate%22:%22[,2026-06-23T13:14:01.462Z]%22,%22keywords%22:%22%22,%22locale%22:%22en-US%22,%22onSale%22:true,%22sortBy%22:%22currentPrice%22,%22sortDir%22:%22ASC%22,%22tag%22:%22%22,%22withPrice%22:true}&extensions={%22persistedQuery%22:{%22version%22:1,%22sha256Hash%22:%2229d49ab31d438cd90be2d554d2d54704951e4223a8fcd290fcf68308841a1979%22}}", timeout = 5)
+                    params = {
+                        "operationName": "searchStoreQuery",
+                        "variables": json.dumps({
+                            "allowCountries": "RO",
+                            "category": "games/edition/base|addons|bundles/games|games/demo|games/edition",
+                            "count": 40,
+                            "country": "RO",
+                            "effectiveDate": "[,2026-07-04T02:04:47.335Z]",
+                            "keywords": "",
+                            "locale": "en-US",
+                            "onSale": True,
+                            "sortBy": "currentPrice",
+                            "sortDir": "ASC",
+                            "start": 0,
+                            "tag": "",
+                            "withPrice": True
+                        }),
+                        "extensions": json.dumps({
+                            "persistedQuery": {
+                                "version": 1,
+                                "sha256Hash": "29d49ab31d438cd90be2d554d2d54704951e4223a8fcd290fcf68308841a1979"
+                            }
+                        })
+                    }
+
+                    response = epic.get("https://store.epicgames.com/graphql", params = params, timeout = 5)
 
                     response.raise_for_status()
 
@@ -511,6 +534,9 @@ def main():
     connsafe = None
     conntmr = None
     conngmz = None
+    checkpth = None
+    conncheck = None
+    chk = None
 
     try:
         safepth = os.path.join(dr(), "safe.db")
@@ -524,6 +550,31 @@ def main():
         else:
             safe.execute("UPDATE safety SET safe = ?", (False,))
         connsafe.commit()
+
+        checkpth = os.path.join(dr(), "check.db")
+        conncheck = connect(checkpth)
+        chk = conncheck.cursor()
+
+        chk.execute("""
+        CREATE TABLE IF NOT EXISTS checks(
+            platform TEXT UNIQUE PRIMARY KEY,
+            hide BOOLEAN DEFAULT 0,
+            silence BOOLEAN DEFAULT 0
+        )
+        """)
+
+        chk.execute("SELECT platform, hide, silence FROM checks")
+        rows = chk.fetchall()
+
+        if not rows:
+            chk.execute("INSERT INTO checks(platform) VALUES (?)", ("Steam",))
+            chk.execute("INSERT INTO checks(platform) VALUES (?)", ("Epic",))
+            chk.execute("INSERT INTO checks(platform) VALUES (?)", ("GOG",))
+            chk.execute("INSERT INTO checks(platform) VALUES (?)", ("itch.io",))
+
+        conncheck.commit()
+
+        conncheck.close()
 
         timerpth = os.path.join(dr(), "timer.db")
         conntmr = connect(timerpth)
