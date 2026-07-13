@@ -39,39 +39,25 @@ async def mainscript(gmz, conngmz):
             print("\033[1m Attempting to update database: \033[0m")
             print("")
 
-            if len(fail) == 4:
-
-                print("Database update   \033[91m FAILED \033[0m")
-                print("")
-                return
-
-            elif fail:
-
-                print("\033[1m Database won't update: \033[0m")
-                print("")
-                for fails in fail:
-                    match fails:
-                        case "steamlogo.png":
-                            print("Steam")
-                        case "epiclogo.png":
-                            print("EpicGames")
-                        case "goglogo.png":
-                            print("GOG")
-                        case _:
-                            print("itch.io")
-                    print("")
-
             if links:
                 linklist = ",".join("?" for _ in links)
                 if not fail:
                     gmz.execute(f"DELETE FROM games WHERE link NOT IN ({linklist})", links)
                 else:
                     faillist = ",".join("?" for _ in fail)
-                    gmz.execute(f"DELETE FROM games WHERE link NOT IN ({linklist}) AND platform NOT IN ({faillist})", links + fail)
-
+                    gmz.execute(f"DELETE FROM games WHERE link NOT IN ({linklist}) AND platform NOT IN ({faillist})",
+                                links + fail)
+                gmz.execute("SELECT link, image FROM games")
+                linki = {link: i for i, link in enumerate(links)}
+                for link, image in gmz.fetchall():
+                    i = linki.get(link)
+                    if i is None:
+                        continue
+                    if image == "" and imgs[i] != "":
+                        gmz.execute("UPDATE games SET image = ? WHERE link = ?", (imgs[i], link))
             else:
                 gmz.execute("DELETE FROM games")
-
+            conngmz.commit()
 
             silencedones = []
             for test in range(len(links)):
@@ -80,8 +66,12 @@ async def mainscript(gmz, conngmz):
                     (links[test], names[test], imgs[test], platforms[test])
                 )
                 if gmz.rowcount > 0:
+                    print(f"{names[test]} from {platforms[test]} added in db")
                     if platforms[test] not in silencedones:
+                        print(f"{platforms[test]} is scrap source")
                         silencedones.append(platforms[test])
+                else:
+                    pass
             conngmz.commit()
 
             try:
@@ -96,20 +86,20 @@ async def mainscript(gmz, conngmz):
                 chk.execute(" SELECT 1 FROM sqlite_master WHERE type='table' AND name='checks' ")
                 if chk.fetchone():
 
-                    chk.execute("SELECT silence FROM checks")
-                    rows = chk.fetchall()
+                    chk.execute("SELECT platform, silence FROM checks")
+
+                    silans = dict(chk.fetchall())
 
                     thisissil = 0
 
-                    if len(rows) == 4:
-                        if "steamlogo.png" in silencedones:
-                            thisissil += rows[0][0]
-                        if "epiclogo.png" in silencedones:
-                            thisissil += rows[1][0]
-                        if "goglogo.png" in silencedones:
-                            thisissil += rows[2][0]
-                        if "itchlogo.png" in silencedones:
-                            thisissil += rows[3][0]
+                    if "steamlogo.png" in silencedones:
+                        thisissil += silans["Steam"]
+                    if "epiclogo.png" in silencedones:
+                        thisissil += silans["Epic"]
+                    if "goglogo.png" in silencedones:
+                        thisissil += silans["GOG"]
+                    if "itchlogo.png" in silencedones:
+                        thisissil += silans["itch.io"]
 
                 conncheck.close()
 
@@ -121,15 +111,15 @@ async def mainscript(gmz, conngmz):
                     base = os.path.dirname(os.path.abspath(__file__))
 
                 notif = Notification(
-                    app_id = "FreeGamz",
+                    app_id = "Gamzy",
                     title = "🎮New Gamz!",
-                    msg = "Hey! there are new games waiting for you!",
+                    msg = "Hey! There are new games waiting for you!",
                     duration = "long",
                     icon = os.path.join(base,"AppLogo.png")
                 )
                 notif.add_actions(
                     label="Open",
-                    launch=os.path.join(dr(), "FreeGamz.exe")
+                    launch=os.path.join(dr(), "Gamzy.exe")
                 )
                 notif.set_audio(audio.Reminder, loop=False)
                 notif.show()
@@ -137,7 +127,7 @@ async def mainscript(gmz, conngmz):
             folder = os.path.join(dr(), "gamzimgs/")
 
             gmz.execute("SELECT image FROM games")
-            dbimgs = {row[0] for row in gmz.fetchall()}
+            dbimgs = {rowaw[0] for rowaw in gmz.fetchall()}
 
             for file in os.listdir(folder):
                 file_path = os.path.join(folder, file)
@@ -347,6 +337,8 @@ async def mainscript(gmz, conngmz):
 
                     response = epic.get("https://store.epicgames.com/graphql", params = params, timeout = 5)
 
+                    print(response.url)
+
                     response.raise_for_status()
 
                     print("EpicGames request   \033[92m SUCCESS \033[0m")
@@ -368,6 +360,8 @@ async def mainscript(gmz, conngmz):
                                                 epiclinks.append(f"https://store.epicgames.com/en-US/p/{gamn['pageSlug']}")
                                                 nam = gam.get("title", "")
                                                 epicnames.append(nam)
+                                                print(f"{nam} found")
+                                                file = ""
                                                 if gam["keyImages"][0]["url"]:
                                                     url = gam["keyImages"][0]["url"]
                                                     ext = os.path.splitext(url)[1].split("?")[0]
@@ -379,10 +373,9 @@ async def mainscript(gmz, conngmz):
                                                         imgresp.raise_for_status()
                                                         with open(file, "wb") as f:
                                                             f.write(imgresp.content)
-                                                    epicimgs.append(file)
-                                                else:
-                                                    epicimgs.append("")
+                                                epicimgs.append(file)
                                                 epicplatforms.append("epiclogo.png")
+                                                print(f"{nam} img registered")
                                 else:
                                     break
 
@@ -495,25 +488,31 @@ async def mainscript(gmz, conngmz):
             asyncio.to_thread(epicscrap)
         )
 
-        links.extend(steamlinks)
-        links.extend(epiclinks)
-        links.extend(goglinks)
-        links.extend(itchlinks)
+        if "steamlogo.png" not in fail:
+            links.extend(steamlinks)
+            names.extend(steamnames)
+            imgs.extend(steamimgs)
+            platforms.extend(steamplatforms)
 
-        names.extend(steamnames)
-        names.extend(epicnames)
-        names.extend(gognames)
-        names.extend(itchnames)
+        if "goglogo.png" not in fail:
+            links.extend(goglinks)
+            names.extend(gognames)
+            imgs.extend(gogimgs)
+            platforms.extend(gogplatforms)
 
-        imgs.extend(steamimgs)
-        imgs.extend(epicimgs)
-        imgs.extend(gogimgs)
-        imgs.extend(itchimgs)
+        if "epiclogo.png" not in fail:
+            links.extend(epiclinks)
+            names.extend(epicnames)
+            imgs.extend(epicimgs)
+            platforms.extend(epicplatforms)
 
-        platforms.extend(steamplatforms)
-        platforms.extend(epicplatforms)
-        platforms.extend(gogplatforms)
-        platforms.extend(itchplatforms)
+        if "itchlogo.png" not in fail:
+            links.extend(itchlinks)
+            names.extend(itchnames)
+            imgs.extend(itchimgs)
+            platforms.extend(itchplatforms)
+
+        assert len(links) == len(names) == len(imgs) == len(platforms)
 
         insertnremove()
 
@@ -573,8 +572,8 @@ def main():
             chk.execute("INSERT INTO checks(platform) VALUES (?)", ("itch.io",))
 
         conncheck.commit()
-
         conncheck.close()
+        conncheck = None
 
         timerpth = os.path.join(dr(), "timer.db")
         conntmr = connect(timerpth)
@@ -602,6 +601,8 @@ def main():
         )
         """)
         conngmz.commit()
+        conngmz.close()
+        conngmz = None
 
         tmr.execute("SELECT nextupdate FROM timer")
         row = tmr.fetchone()
@@ -624,7 +625,9 @@ def main():
 
             try:
 
-                httpx.get("https://1.1.1.1", timeout=5)
+                internettest = httpx.get("https://www.google.com/generate_204", timeout=5)
+
+                internettest.raise_for_status()
 
                 if now >= row[0]:
 
@@ -645,29 +648,36 @@ def main():
 
                         if conngmz:
                             conngmz.close()
+                            conngmz = None
 
+                    now = datetime.now().timestamp()
                     pause = timedelta(hours=uniform(12, 24))
                     tmr.execute("UPDATE timer SET nextupdate = ?", (now + pause.total_seconds(),))
                     conntmr.commit()
                     tmr.execute("SELECT nextupdate FROM timer")
                     row = tmr.fetchone()
 
-                if row[0] - now > 0:
-                    print(" Entering sleep")
-                    safe.execute("UPDATE safety SET safe = ?", (True,))
-                    connsafe.commit()
-                    sleep(row[0] - now)
-                else:
-                    print(" Entering quick sleep")
-                    safe.execute("UPDATE safety SET safe = ?", (True,))
-                    connsafe.commit()
-                    sleep(30)
+                print(" Entering sleep")
+                safe.execute("UPDATE safety SET safe = ?", (True,))
+                connsafe.commit()
+
+                while True:
+
+                    now = datetime.now().timestamp()
+
+                    if now >= row[0]:
+                        break
+
+                    sleep(uniform(30, 60))
+
+
             except Exception as e:
                 print(f"\033[1;91m ERROR: \033[0m {e}")
                 print("")
                 safe.execute("UPDATE safety SET safe = ?", (True,))
                 connsafe.commit()
-                sleep(600)
+                tmr.execute("UPDATE timer SET nextupdate = ?", (now + uniform(600, 780),))
+                conntmr.commit()
 
     except Exception as e:
         for conn in [connsafe, conntmr, conngmz]:

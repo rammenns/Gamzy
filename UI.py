@@ -76,7 +76,7 @@ class updatebutton(QPushButton):
             except PermissionError:
                 pass
 
-            url = get("https://api.github.com/repos/rammenns/FreeGamz/releases/latest", timeout=5)
+            url = get("https://api.github.com/repos/rammenns/Gamzy/releases/latest", timeout=5)
             if url.status_code != 200:
                 self.setText("Update failed :( Try again")
                 self.setEnabled(True)
@@ -223,10 +223,10 @@ class gamUI(QWidget):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("FreeGamz")
+        self.setWindowTitle("Gamzy")
         self.setFixedSize(950, 415)
         self.move(510, 350)
-        self.setWindowIcon(QIcon(pathfind("gamzicon.png")))
+        self.setWindowIcon(QIcon(pathfind("AppLogo.png")))
         self.setObjectName("window")
 
         central = QWidget()
@@ -460,12 +460,12 @@ class MainWindow(QMainWindow):
         if refr and readd is None:
             headers = {
                 "Accept": "application/vnd.github+json",
-                "User-Agent": "FreeGamz"
+                "User-Agent": "Gamzy"
             }
-            url = get("https://api.github.com/repos/rammenns/FreeGamz/releases/latest",headers = headers, timeout=5)
+            url = get("https://api.github.com/repos/rammenns/Gamzy/releases/latest",headers = headers, timeout=5)
             if url.status_code == 200:
                 ver = url.json()
-                if ver["tag_name"] != "1.6.3":
+                if ver["tag_name"] != "1.7":
                     self.scrolyout.addWidget(updatebutton(self.basefont, ver["tag_name"]))
 
         checkpth = os.path.join(dr(), "check.db")
