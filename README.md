@@ -8,7 +8,7 @@ Check the **Releases** section and download the installer from there. Installing
 
 ## How does it work
 
-1. In background, a script is scrapping the internet to save the data of the free games offers
+1. A background script is periodically checking the games platforms for free offers and giveaways
 2. The UI shows you the platform from where the game was found, the name and poster of the game, all packaged in a card
 3. Just click the card of the game you are interested in, and it will open a new web tab with that game you want to download
 4. The "Hide" menu hides games from platforms you are not interested in and the "Silence" menu does the same but for desktop notifications
