@@ -1,4 +1,4 @@
-# FreeGamz
+# Gamzy
 
 Hello, and welcome! **Gamzy** is a small desktop app that searches for you what temporary **free games** are on **Steam**, **Epic Games**, **GOG**, **itch.io** in one place, so you don't need to bother searching everywhere. In the next versions I'll try to make the app show what **free games** offers are on other platforms aswell.
 
