@@ -1,7 +1,7 @@
 import sys
 from sqlite3 import connect
 from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy, QScrollArea, QPushButton, QProgressBar, QCheckBox, QToolButton, QMenu, QWidgetAction
-from PyQt5.QtGui import QIcon, QPixmap, QFontDatabase, QFont
+from PyQt5.QtGui import QIcon, QPixmap, QFontDatabase, QFont, QGuiApplication, QCursor
 from PyQt5.QtCore import Qt, QTimer
 from webbrowser import open_new_tab
 from requests import get
@@ -9,6 +9,7 @@ import subprocess
 import os
 from ctypes import windll
 import tempfile
+
 
 def pathfind(f):
     if getattr(sys, "frozen", False):
@@ -32,8 +33,10 @@ class updatebutton(QPushButton):
         self.setObjectName("updatebutton")
         self.setText(f"Version {newver} available! Click to install.")
         self.setFixedHeight(120)
+        self.setFixedWidth(930)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.setFont(font)
+        self.baseFont = QFont(font)
         self.progress = QProgressBar(self)
         self.progress.setGeometry(125, 75, 650, 25)
         self.progress.setTextVisible(False)
@@ -169,18 +172,29 @@ class updatebutton(QPushButton):
             self.setEnabled(True)
             return
 
+    def applyScaleAgain(self, dpi):
+
+        font = QFont(self.baseFont)
+        font.setPointSize(round(10 * (144 / dpi)))
+        self.setFont(font)
+
+
+
 class gamUI(QWidget):
-    def __init__(self, link, image, name, platform, font):
+    def __init__(self, link, image, name, platform, new, font, dpi):
         super().__init__()
 
         self.setObjectName("FreeGam")
         self.link = link
         self.setFixedHeight(145)
+        self.setFixedWidth(930)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.setAttribute(Qt.WA_StyledBackground, True)
 
         layout = QHBoxLayout(self)
+        layout.setAlignment(Qt.AlignVCenter)
         datalayout = QVBoxLayout()
+        newlayout = QVBoxLayout()
 
         self.imglabel = QLabel(self)
         imagemap = QPixmap(image)
@@ -189,19 +203,35 @@ class gamUI(QWidget):
 
         self.namelabel = QLabel(name)
         self.namelabel.setFont(font)
+        self.namelabel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.namelabel.setMinimumWidth(0)
+
+        self.baseFont = QFont(font)
+        self.baseFont.setPointSize(10)
 
         platformlabel = QLabel(self)
         platformmap = QPixmap(pathfind(platform))
         scale = platformmap.scaledToHeight(50, Qt.SmoothTransformation)
         platformlabel.setPixmap(scale)
 
+        self.newlabel = QLabel("NEW" if new else "")
+        fuontus = QFont(font)
+        fuontus.setPointSize(round(12 * (144 / dpi)))
+        fuontus.setBold(True)
+        self.newlabel.setFont(fuontus)
+        self.newlabel.setFixedWidth(60)
+        self.newlabel.setAlignment(Qt.AlignRight | Qt.AlignBottom)
+
         datalayout.addWidget(self.namelabel)
         datalayout.addWidget(platformlabel)
 
         layout.addWidget(self.imglabel)
         layout.addLayout(datalayout)
-
         layout.addStretch()
+        layout.addWidget(
+            self.newlabel,
+            alignment=Qt.AlignRight | Qt.AlignBottom
+        )
 
         self.setStyleSheet("""
             #FreeGam {
@@ -216,15 +246,33 @@ class gamUI(QWidget):
 
         platformlabel.setStyleSheet("background: transparent;")
 
+        self.newlabel.setStyleSheet("background: transparent; color: DeepSkyBlue;")
+
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             open_new_tab(self.link)
 
+    def applyScaleAgain(self, dpi):
+
+        font = QFont(self.baseFont)
+        font.setPointSize(round(10 * (144 / dpi)))
+
+        self.namelabel.setFont(font)
+
+        newfont = QFont(self.baseFont)
+        newfont.setBold(True)
+        newfont.setPointSize(round(12 * (144 / dpi)))
+
+        self.newlabel.setFont(newfont)
+
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, updt = True):
         super().__init__()
+
+        self.currdpi = 144
+
         self.setWindowTitle("Gamzy")
-        self.setFixedSize(950, 415)
+        self.setFixedSize(1000, 415)
         self.move(510, 350)
         self.setWindowIcon(QIcon(pathfind("AppLogo.png")))
         self.setObjectName("window")
@@ -253,11 +301,10 @@ class MainWindow(QMainWindow):
         chk.execute("""
         CREATE TABLE IF NOT EXISTS checks(
             platform TEXT UNIQUE PRIMARY KEY,
-            hide BOOLEAN DEFAULT 0,
-            silence BOOLEAN DEFAULT 0
+            hide BOOLEAN DEFAULT FALSE,
+            silence BOOLEAN DEFAULT FALSE
         )
         """)
-        conncheck.commit()
 
         chk.execute("SELECT platform, hide, silence FROM checks")
         rows = chk.fetchall()
@@ -267,10 +314,22 @@ class MainWindow(QMainWindow):
             chk.execute("INSERT INTO checks(platform) VALUES (?)", ("Epic",))
             chk.execute("INSERT INTO checks(platform) VALUES (?)", ("GOG",))
             chk.execute("INSERT INTO checks(platform) VALUES (?)", ("itch.io",))
-            conncheck.commit()
+            chk.execute("INSERT INTO checks(platform) VALUES (?)", ("Old",))
 
             chk.execute("SELECT platform, hide, silence FROM checks")
             rows = chk.fetchall()
+
+        ####################################################################
+        try:
+            chk.execute("INSERT INTO checks(platform) VALUES (?)", ("Old",))
+            conncheck.commit()
+            chk.execute("SELECT platform, hide, silence FROM checks")
+            rows = chk.fetchall()
+        except:
+            pass
+        ####################################################################
+
+        conncheck.commit()
 
         self.hidedropdown = QToolButton()
         self.hidedropdown.setText("Hide    >")
@@ -283,86 +342,22 @@ class MainWindow(QMainWindow):
         checks.addWidget(self.sildropdown)
         layout.addLayout(checks)
 
-        presets = {}
+        self.presets = {}
 
         for platform, hide, silence in rows:
-            presets[platform] = {
+            self.presets[platform] = {
                 "hide": hide,
                 "silence": silence
             }
 
-        hidemenu = QMenu(self)
-
-        hidemenu.aboutToShow.connect(lambda: self.hidedropdown.setText("Hide    v"))
-        hidemenu.aboutToHide.connect(lambda: self.hidedropdown.setText("Hide    >"))
-
-        hidesteam = QCheckBox("Steam")
-        hidesteam.setChecked(presets.get("Steam", {}).get("hide", False))
-        steamhide_action = QWidgetAction(self)
-        steamhide_action.setDefaultWidget(hidesteam)
-        hidemenu.addAction(steamhide_action)
-        hidesteam.toggled.connect(lambda checked: self.togg("Steam", True, checked))
-
-        hideepic = QCheckBox("Epic")
-        hideepic.setChecked(presets.get("Epic", {}).get("hide", False))
-        epichide_action = QWidgetAction(self)
-        epichide_action.setDefaultWidget(hideepic)
-        hidemenu.addAction(epichide_action)
-        hideepic.toggled.connect(lambda checked: self.togg("Epic", True, checked))
-
-        hidegog = QCheckBox("GOG")
-        hidegog.setChecked(presets.get("GOG", {}).get("hide", False))
-        goghide_action = QWidgetAction(self)
-        goghide_action.setDefaultWidget(hidegog)
-        hidemenu.addAction(goghide_action)
-        hidegog.toggled.connect(lambda checked: self.togg("GOG", True, checked))
-
-        hideitch = QCheckBox("itch.io")
-        hideitch.setChecked(presets.get("itch.io", {}).get("hide", False))
-        itchhide_action = QWidgetAction(self)
-        itchhide_action.setDefaultWidget(hideitch)
-        hidemenu.addAction(itchhide_action)
-        hideitch.toggled.connect(lambda checked: self.togg("itch.io", True, checked))
-
-        silmenu = QMenu(self)
-
-        silmenu.aboutToShow.connect(lambda: self.sildropdown.setText("Silence  v"))
-        silmenu.aboutToHide.connect(lambda: self.sildropdown.setText("Silence  >"))
-
-        silsteam = QCheckBox("Steam")
-        silsteam.setChecked(presets.get("Steam", {}).get("silence", False))
-        steamsil_action = QWidgetAction(self)
-        steamsil_action.setDefaultWidget(silsteam)
-        silmenu.addAction(steamsil_action)
-        silsteam.toggled.connect(lambda checked: self.togg("Steam", False, checked))
-
-        silepic = QCheckBox("Epic")
-        silepic.setChecked(presets.get("Epic", {}).get("silence", False))
-        epicsil_action = QWidgetAction(self)
-        epicsil_action.setDefaultWidget(silepic)
-        silmenu.addAction(epicsil_action)
-        silepic.toggled.connect(lambda checked: self.togg("Epic", False, checked))
-
-        silgog = QCheckBox("GOG")
-        silgog.setChecked(presets.get("GOG", {}).get("silence", False))
-        gogsil_action = QWidgetAction(self)
-        gogsil_action.setDefaultWidget(silgog)
-        silmenu.addAction(gogsil_action)
-        silgog.toggled.connect(lambda checked: self.togg("GOG", False, checked))
-
-        silitch = QCheckBox("itch.io")
-        silitch.setChecked(presets.get("itch.io", {}).get("silence", False))
-        itchsil_action = QWidgetAction(self)
-        itchsil_action.setDefaultWidget(silitch)
-        silmenu.addAction(itchsil_action)
-        silitch.toggled.connect(lambda checked: self.togg("itch.io", False, checked))
+        self.createmenus()
 
         conncheck.close()
 
-        self.hidedropdown.setMenu(hidemenu)
+        self.hidedropdown.setMenu(self.hidemenu)
         self.hidedropdown.setPopupMode(QToolButton.InstantPopup)
 
-        self.sildropdown.setMenu(silmenu)
+        self.sildropdown.setMenu(self.silmenu)
         self.sildropdown.setPopupMode(QToolButton.InstantPopup)
 
         scroll = QScrollArea()
@@ -378,7 +373,7 @@ class MainWindow(QMainWindow):
         scroll.setWidget(scrollgamz)
         layout.addWidget(scroll)
 
-        p = self.creategamz(True)
+        p = self.creategamz(updt)
 
         self.timer = QTimer(self)
         self.timer.timeout.connect(lambda: self.creategamz(True))
@@ -388,45 +383,86 @@ class MainWindow(QMainWindow):
         else:
             self.timer.start(5000)
 
-        self.setStyleSheet ("""
-            #window {background-color: #424242;}
-            QToolButton {
-                width: 140px;
-                height: 40px;
-                font-family: Minecraftia;
-                font-size: 10pt;
-                background-color: transparent;
-                border: none;
-                color: white;
-            }
-            QToolButton:hover{
-                background-color: transparent;
-                border: none;
-                color: white;
-            }
-            QToolButton::menu-indicator {
-                image: none;
-            }
-            QCheckBox {
-                font-family: Minecraftia;
-                font-size: 20px;
-            }
-            QCheckBox::indicator {
-                width: 24px;
-                height: 24px;
-            }
-            QMenu {
-                font-family: Minecraftia;
-                font-size: 10pt;
-                width: 140px;
-            }
-            QAction::indicator {
-                width: 40px;
-                height: 40px;
-            }
-        """)
+        self.applyScale()
 
         scrollgamz.setStyleSheet("background-color: #424242;")
+
+    def createmenus(self):
+
+        presets = self.presets
+
+        self.hidemenu = QMenu(self)
+
+        self.hidemenu.aboutToShow.connect(lambda: self.hidedropdown.setText("Hide    v"))
+        self.hidemenu.aboutToHide.connect(lambda: self.hidedropdown.setText("Hide    >"))
+
+        hidesteam = QCheckBox("Steam")
+        hidesteam.setChecked(presets.get("Steam", {}).get("hide", False))
+        steamhide_action = QWidgetAction(self)
+        steamhide_action.setDefaultWidget(hidesteam)
+        self.hidemenu.addAction(steamhide_action)
+        hidesteam.toggled.connect(lambda checked: self.togg("Steam", True, checked))
+
+        hideepic = QCheckBox("Epic")
+        hideepic.setChecked(presets.get("Epic", {}).get("hide", False))
+        epichide_action = QWidgetAction(self)
+        epichide_action.setDefaultWidget(hideepic)
+        self.hidemenu.addAction(epichide_action)
+        hideepic.toggled.connect(lambda checked: self.togg("Epic", True, checked))
+
+        hidegog = QCheckBox("GOG")
+        hidegog.setChecked(presets.get("GOG", {}).get("hide", False))
+        goghide_action = QWidgetAction(self)
+        goghide_action.setDefaultWidget(hidegog)
+        self.hidemenu.addAction(goghide_action)
+        hidegog.toggled.connect(lambda checked: self.togg("GOG", True, checked))
+
+        hideitch = QCheckBox("itch.io")
+        hideitch.setChecked(presets.get("itch.io", {}).get("hide", False))
+        itchhide_action = QWidgetAction(self)
+        itchhide_action.setDefaultWidget(hideitch)
+        self.hidemenu.addAction(itchhide_action)
+        hideitch.toggled.connect(lambda checked: self.togg("itch.io", True, checked))
+
+        hideolds = QCheckBox("Old")
+        hideolds.setChecked(presets.get("Old", {}).get("hide", False))
+        oldshide_action = QWidgetAction(self)
+        oldshide_action.setDefaultWidget(hideolds)
+        self.hidemenu.addAction(oldshide_action)
+        hideolds.toggled.connect(lambda checked: self.togg("Old", True, checked))
+
+        self.silmenu = QMenu(self)
+
+        self.silmenu.aboutToShow.connect(lambda: self.sildropdown.setText("Silence  v"))
+        self.silmenu.aboutToHide.connect(lambda: self.sildropdown.setText("Silence  >"))
+
+        silsteam = QCheckBox("Steam")
+        silsteam.setChecked(presets.get("Steam", {}).get("silence", False))
+        steamsil_action = QWidgetAction(self)
+        steamsil_action.setDefaultWidget(silsteam)
+        self.silmenu.addAction(steamsil_action)
+        silsteam.toggled.connect(lambda checked: self.togg("Steam", False, checked))
+
+        silepic = QCheckBox("Epic")
+        silepic.setChecked(presets.get("Epic", {}).get("silence", False))
+        epicsil_action = QWidgetAction(self)
+        epicsil_action.setDefaultWidget(silepic)
+        self.silmenu.addAction(epicsil_action)
+        silepic.toggled.connect(lambda checked: self.togg("Epic", False, checked))
+
+        silgog = QCheckBox("GOG")
+        silgog.setChecked(presets.get("GOG", {}).get("silence", False))
+        gogsil_action = QWidgetAction(self)
+        gogsil_action.setDefaultWidget(silgog)
+        self.silmenu.addAction(gogsil_action)
+        silgog.toggled.connect(lambda checked: self.togg("GOG", False, checked))
+
+        silitch = QCheckBox("itch.io")
+        silitch.setChecked(presets.get("itch.io", {}).get("silence", False))
+        itchsil_action = QWidgetAction(self)
+        itchsil_action.setDefaultWidget(silitch)
+        self.silmenu.addAction(itchsil_action)
+        silitch.toggled.connect(lambda checked: self.togg("itch.io", False, checked))
 
 
     def togg(self, plat, wh, ch):
@@ -435,8 +471,10 @@ class MainWindow(QMainWindow):
         chk = conncheck.cursor()
         if wh:
             chk.execute("UPDATE checks SET hide = ? WHERE platform = ?", (ch, plat))
+            self.presets[plat]["hide"] = ch
         else:
             chk.execute("UPDATE checks SET silence = ? WHERE platform = ?", (ch, plat))
+            self.presets[plat]["silence"] = ch
         conncheck.commit()
         conncheck.close()
 
@@ -453,6 +491,8 @@ class MainWindow(QMainWindow):
                 if isinstance(widget, updatebutton):
                     readd = widget
                     continue
+                widget.hide()
+                widget.setParent(None)
                 widget.deleteLater()
         if readd:
             self.scrolyout.addWidget(readd)
@@ -462,11 +502,14 @@ class MainWindow(QMainWindow):
                 "Accept": "application/vnd.github+json",
                 "User-Agent": "Gamzy"
             }
-            url = get("https://api.github.com/repos/rammenns/Gamzy/releases/latest",headers = headers, timeout=5)
-            if url.status_code == 200:
+            try:
+                url = get("https://api.github.com/repos/rammenns/Gamzy/releases/latest",headers = headers, timeout = 5)
+                url.raise_for_status()
                 ver = url.json()
-                if ver["tag_name"] != "1.7":
+                if ver["tag_name"] != "1.8":
                     self.scrolyout.addWidget(updatebutton(self.basefont, ver["tag_name"]))
+            except:
+                pass
 
         checkpth = os.path.join(dr(), "check.db")
         conncheck = connect(checkpth, timeout = 180)
@@ -480,6 +523,7 @@ class MainWindow(QMainWindow):
         ephide = rows[1][0]
         goghide = rows[2][0]
         ithide = rows[3][0]
+        oldhide = rows[4][0]
 
 
         conn = None
@@ -492,22 +536,38 @@ class MainWindow(QMainWindow):
             return False
 
         try:
-            cursor.execute("SELECT link, image, name, platform FROM games")
+            cursor.execute("""
+                SELECT link, image, name, platform, new FROM games
+                ORDER BY CASE platform
+                    WHEN 'goglogo.png' THEN 1
+                    WHEN 'steamlogo.png' THEN 2
+                    WHEN 'epiclogo.png' THEN 3
+                    WHEN 'itchlogo.png' THEN 4
+                END,
+                new DESC,
+                name
+            """)
             rows = cursor.fetchall()
         except:
             rows = []
 
 
-        for link, image, name, platform in rows:
-            if platform == "steamlogo.png" and sthide:
+        for link, image, name, platform, new in rows:
+            if len(name) > 43:
+                name = name[:40] + "..."
+            if oldhide and not new:
                 continue
-            elif platform == "epiclogo.png" and ephide:
+            if goghide and platform == "goglogo.png":
                 continue
-            elif platform == "goglogo.png" and goghide:
+            elif sthide and platform == "steamlogo.png":
                 continue
-            elif platform == "itchlogo.png" and ithide:
+            elif ephide and platform == "epiclogo.png":
+                continue
+            elif ithide and platform == "itchlogo.png":
                 break
-            card = gamUI(link, image, name, platform, self.basefont)
+            font = QFont(self.basefont)
+            font.setPointSize(self.uiscale(10))
+            card = gamUI(link, image, name, platform, new, font, self.currdpi)
             self.scrolyout.addWidget(card)
 
 
@@ -515,9 +575,145 @@ class MainWindow(QMainWindow):
 
         return bool(rows)
 
+    def uiscale(self, value):
+        dpi = self.currdpi
+        return round(value * (144 / dpi))
+
+    def applyScale(self):
+
+        tensize = self.uiscale(10)
+        lvsize = self.uiscale(11)
+
+        self.setStyleSheet(f"""
+            #window {{background-color: #424242;}}
+
+            QToolButton {{
+                width: 140px;
+                height: 40px;
+                font-family: Minecraftia;
+                font-size: {lvsize}pt;
+                background-color: transparent;
+                border: none;
+                color: white;
+            }}
+
+            QToolButton:hover {{
+                background-color: transparent;
+                border: none;
+                color: white;
+            }}
+
+            QToolButton::menu-indicator {{
+                image: none;
+            }}
+
+            QCheckBox {{
+                font-family: Minecraftia;
+                font-size: {tensize}pt;
+                margin-left: 10px;
+            }}
+
+            QCheckBox::indicator {{
+                width: 24px;
+                height: 24px;
+            }}
+
+            QMenu {{
+                font-family: Minecraftia;
+                font-size: {lvsize}pt;
+                width: 140px;
+            }}
+        """)
+
+        self.hidedropdown.adjustSize()
+        self.sildropdown.adjustSize()
+
+        self.centralWidget().layout().invalidate()
+        self.centralWidget().layout().activate()
+
+        for checkbox in self.findChildren(QCheckBox):
+            checkbox.adjustSize()
+
+        for menu in self.findChildren(QMenu):
+            menu.adjustSize()
+
+        self.centralWidget().repaint()
+
+
+    def showEvent(self, event):
+
+        super().showEvent(event)
+
+        if not hasattr(self, "_screen_connected"):
+            handle = self.windowHandle()
+            if handle:
+                self.currdpi = handle.screen().logicalDotsPerInch()
+
+                self.applyScale()
+                self.rescaleCards()
+
+                self.updateGeometry()
+                self.update()
+                QApplication.processEvents()
+
+                handle.screenChanged.connect(self.adaptscreen)
+                self._screen_connected = True
+
+    def adaptscreen(self, screen):
+
+        newdpi = screen.logicalDotsPerInch()
+
+        if newdpi == self.currdpi:
+            return
+
+        self.currdpi = newdpi
+
+        QTimer.singleShot(0, self.finishScale)
+
+    def finishScale(self):
+
+        self.hidedropdown.setMenu(None)
+        self.sildropdown.setMenu(None)
+
+        self.hidemenu.deleteLater()
+        self.silmenu.deleteLater()
+
+        self.createmenus()
+
+        self.hidedropdown.setMenu(self.hidemenu)
+        self.sildropdown.setMenu(self.silmenu)
+
+        self.applyScale()
+        self.rescaleCards()
+
+        self.updateGeometry()
+        self.update()
+        QApplication.processEvents()
+
+    def rescaleCards(self):
+
+        for card in self.findChildren(gamUI):
+            card.applyScaleAgain(self.currdpi)
+
+        for button in self.findChildren(updatebutton):
+            button.applyScaleAgain(self.currdpi)
+
+    def closeEvent(self, event):
+
+        try:
+            conn = connect(gamespth, timeout=10)
+            cursor = conn.cursor()
+
+            cursor.execute("UPDATE games SET seen = ?", (True,))
+
+            conn.close()
+        except:
+            pass
+
 
 def main():
     app = QApplication(sys.argv)
+    app.setStyle("Fusion")
     window = MainWindow()
     window.show()
     sys.exit(app.exec_())
