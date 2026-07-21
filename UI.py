@@ -1,30 +1,44 @@
 import sys
 from sqlite3 import connect
-from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy, QScrollArea, QPushButton, QProgressBar, QCheckBox, QToolButton, QMenu, QWidgetAction
+from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy, QScrollArea, QPushButton, QProgressBar, QCheckBox, QToolButton, QMenu, QWidgetAction, QMessageBox
 from PyQt5.QtGui import QIcon, QPixmap, QFontDatabase, QFont, QGuiApplication, QCursor
 from PyQt5.QtCore import Qt, QTimer
 from webbrowser import open_new_tab
 from requests import get
 import subprocess
-import os
-from ctypes import windll
+from pathlib import Path
 import tempfile
-
+import os
+import platform
+syst = platform.system()
+if syst == "Windows":
+    from ctypes import windll
+elif syst not in {"Darwin", "Linux"}:
+    app = QApplication(sys.argv)
+    QMessageBox.critical(
+        None,
+        "Gamzy",
+        f"Unsupported operating system: {syst}\n\nBut I can fix this if you ask nicely :3"
+    )
+    sys.exit(1)
 
 def pathfind(f):
     if getattr(sys, "frozen", False):
-        base = sys._MEIPASS
+        base = Path(sys._MEIPASS)
     else:
-        base = os.path.dirname(os.path.abspath(__file__))
-    return os.path.join(base, f)
+        base = Path(__file__).resolve().parent
+    return base / f
 
 def dr():
     if getattr(sys, "frozen", False):
-        return os.path.dirname(sys.executable)
-    return os.path.dirname(os.path.abspath(__file__))
+        return Path(sys.executable).parent
+    return Path(__file__).resolve().parent
 
 def updatepth():
-    return os.path.join(tempfile.gettempdir(), "update.exe")
+    if syst == "Windows":
+        return Path(tempfile.gettempdir()) / "update.exe"
+    elif syst == "Darwin":
+        return Path(tempfile.gettempdir()) / "update.app"
 
 class updatebutton(QPushButton):
     def __init__(self, font, newver):
@@ -72,16 +86,17 @@ class updatebutton(QPushButton):
 
         try:
 
-            try:
-                os.remove(updatepth())
-            except FileNotFoundError:
-                pass
-            except PermissionError:
-                pass
+            if syst != "Linux":
+                try:
+                    updatepth().unlink()
+                except FileNotFoundError:
+                    pass
+                except PermissionError:
+                    pass
 
             url = get("https://api.github.com/repos/rammenns/Gamzy/releases/latest", timeout=5)
             if url.status_code != 200:
-                self.setText("Update failed :( Try again")
+                self.setText("Connection lost :( Try again")
                 self.setEnabled(True)
                 return
 
@@ -89,7 +104,7 @@ class updatebutton(QPushButton):
             downl= None
 
             for asset in new['assets']:
-                if asset["name"].endswith(".exe"):
+                if (syst == "Windows" and asset["name"].endswith(".exe")) or (syst == "Darwin" and asset["name"].endswith(".dmg")) or (syst == "Linux" and asset["name"].endswith(".AppImage")):
                     downl = asset["browser_download_url"]
                     break
 
@@ -108,7 +123,18 @@ class updatebutton(QPushButton):
             total = int(file.headers.get("content-length", 0))
             downloaded = 0
 
-            with open(updatepth(), "wb") as f:
+            if syst == "Windows":
+                scriptpth = updatepth()
+
+            elif syst == "Darwin":
+                scriptpth = updatepth()
+
+            elif syst == "Linux":
+                old = Path(os.environ["APPIMAGE"])
+                scriptpth = old.with_name("Linux Gamzy.AppImage")
+                shellpth = old.with_name("update.sh")
+
+            with open(scriptpth, "wb") as f:
                 for chunk in file.iter_content(8192):
                     if chunk:
                         f.write(chunk)
@@ -125,7 +151,7 @@ class updatebutton(QPushButton):
             self.setText("Installing...")
             QApplication.processEvents()
 
-            safepth = os.path.join(dr(), "safe.db")
+            safepth = str(dr() / "safe.db")
             connsafe = connect(safepth, timeout=10)
             safe = connsafe.cursor()
             safe.execute("SELECT safe FROM safety")
@@ -139,30 +165,86 @@ class updatebutton(QPushButton):
 
             connsafe.close()
 
-            subprocess.run(
-                [
-                    "taskkill",
-                    "/F",
-                    "/IM",
-                    "GamzScript.exe"
-                ],
-                capture_output=True
-            )
+            if syst == "Windows":
 
-            permission = windll.shell32.ShellExecuteW(
-                None,
-                "runas",
-                updatepth(),
-                "/SILENT /NORESTART",
-                None,
-                1
-            )
-            if permission <= 32:
-                self.setText("Update cancelled :( Try again?")
-                self.progress.hide()
-                self.setEnabled(True)
-                subprocess.Popen(["GamzScript.exe"])
-                return
+                subprocess.run(
+                    [
+                        "taskkill",
+                        "/F",
+                        "/IM",
+                        "GamzScript.exe"
+                    ],
+                    capture_output=True
+                )
+
+                permission = windll.shell32.ShellExecuteW(
+                    None,
+                    "runas",
+                    scriptpth,
+                    "/SILENT /NORESTART",
+                    None,
+                    1
+                )
+                if permission <= 32:
+                    self.setText("Update canceled :( Try again?")
+                    self.progress.hide()
+                    self.setEnabled(True)
+                    subprocess.Popen([str(dr() / "GamzScript.exe")])
+                    return
+
+            elif syst == "Darwin":
+
+                subprocess.run(
+                    [
+                        "pkill",
+                        "-f",
+                        "GamzScript"
+                    ],
+                    capture_output=True
+                )
+
+                permission = subprocess.run(
+                    [
+                        "osascript",
+                        "-e",
+                        f'do shell script "{str(updatepth())} --silent" with administrator privileges'
+                    ],
+                    capture_output=True
+                )
+                if permission.returncode != 0:
+                    self.setText("Update canceled :( Try again")
+                    self.progress.hide()
+                    self.setEnabled(True)
+                    subprocess.Popen([str(dr() / "GamzScript")])
+                    return
+
+            elif syst == "Linux":
+
+                subprocess.run(
+                    [
+                        "pkill",
+                        "-f",
+                        "GamzScript"
+                    ],
+                    capture_output=True
+                )
+
+                script = f"""#!/bin/sh
+                sleep 2
+
+                rm -f "{old}"
+                mv "{scriptpth}" "{old}"
+
+                chmod +x "{old}"
+
+                exec "{old}"
+                """
+                with open(shellpth, "w") as f:
+                    f.write(script)
+
+                subprocess.run(["chmod", "+x", str(shellpth)])
+
+                subprocess.Popen(["pkexec", str(shellpth)])
 
             QApplication.quit()
 
@@ -210,7 +292,7 @@ class gamUI(QWidget):
         self.baseFont.setPointSize(10)
 
         platformlabel = QLabel(self)
-        platformmap = QPixmap(pathfind(platform))
+        platformmap = QPixmap(str(pathfind(platform)))
         scale = platformmap.scaledToHeight(50, Qt.SmoothTransformation)
         platformlabel.setPixmap(scale)
 
@@ -274,13 +356,13 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Gamzy")
         self.setFixedSize(1000, 415)
         self.move(510, 350)
-        self.setWindowIcon(QIcon(pathfind("AppLogo.png")))
+        self.setWindowIcon(QIcon(str(pathfind("AppLogo.png"))))
         self.setObjectName("window")
 
         central = QWidget()
         self.setCentralWidget(central)
 
-        namefont = QFontDatabase.addApplicationFont(pathfind("Minecraftia-Regular.ttf"))
+        namefont = QFontDatabase.addApplicationFont(str(pathfind("Minecraftia-Regular.ttf")))
         fontfam = QFontDatabase.applicationFontFamilies(namefont)
         if fontfam:
             self.basefont = QFont(fontfam[0], 10)
@@ -292,7 +374,7 @@ class MainWindow(QMainWindow):
         checkpth = None
         conncheck = None
         try:
-            checkpth = os.path.join(dr(), "check.db")
+            checkpth = str(dr() / "check.db")
             conncheck = connect(checkpth, timeout = 180)
             chk = conncheck.cursor()
         except:
@@ -387,6 +469,12 @@ class MainWindow(QMainWindow):
 
         scrollgamz.setStyleSheet("background-color: #424242;")
 
+        if syst == "Linux":
+            appimage = os.environ.get("APPIMAGE")
+            if appimage:
+                Path(appimage).with_name("update.sh").unlink(missing_ok=True)
+
+
     def createmenus(self):
 
         presets = self.presets
@@ -466,7 +554,7 @@ class MainWindow(QMainWindow):
 
 
     def togg(self, plat, wh, ch):
-        checkpth = os.path.join(dr(), "check.db")
+        checkpth = str(dr() / "check.db")
         conncheck = connect(checkpth, timeout = 180)
         chk = conncheck.cursor()
         if wh:
@@ -506,12 +594,16 @@ class MainWindow(QMainWindow):
                 url = get("https://api.github.com/repos/rammenns/Gamzy/releases/latest",headers = headers, timeout = 5)
                 url.raise_for_status()
                 ver = url.json()
-                if ver["tag_name"] != "1.8":
-                    self.scrolyout.addWidget(updatebutton(self.basefont, ver["tag_name"]))
+                if ver["tag_name"] != "1.9":
+                    tag_name = ver["tag_name"]
+                    for asset in ver['assets']:
+                        if (syst == "Windows" and asset["name"].endswith(".exe")) or (syst == "Darwin" and asset["name"].endswith(".dmg")) or (syst == "Linux" and asset["name"].endswith(".AppImage")):
+                            self.scrolyout.addWidget(updatebutton(self.basefont, tag_name))
+                            break
             except:
                 pass
 
-        checkpth = os.path.join(dr(), "check.db")
+        checkpth = str(dr() / "check.db")
         conncheck = connect(checkpth, timeout = 180)
         chk = conncheck.cursor()
 
@@ -529,7 +621,7 @@ class MainWindow(QMainWindow):
         conn = None
         cursor = None
         try:
-            gamespth = os.path.join(dr(), "games.db")
+            gamespth = str(dr() / "games.db")
             conn = connect(gamespth, timeout = 10)
             cursor = conn.cursor()
         except:

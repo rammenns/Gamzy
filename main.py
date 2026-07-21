@@ -1,11 +1,26 @@
-from sys import argv, exit
+import sys
 from subprocess import Popen
 import psutil
 from socket import socket, AF_INET, SOCK_STREAM, error
 from PyQt5.QtWidgets import QApplication
 from UI import MainWindow
+import platform
+from pathlib import Path
 
 oneinstance = None
+
+def dr():
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).parent
+    return Path(__file__).resolve().parent
+
+def GamzScript():
+
+    syst = platform.system()
+    if syst == "Windows":
+        return "GamzScript.exe"
+    elif syst == "Darwin" or syst == "Linux":
+        return "GamzScript"
 
 def uirun():
     global oneinstance
@@ -19,24 +34,24 @@ def uirun():
 def scriptrun():
 
     for p in psutil.process_iter(['name']):
-        if p.info['name'] == "GamzScript.exe":
+        if p.info['name'] == GamzScript():
             return True
 
     return False
 
 def main():
-    app = QApplication(argv)
+    app = QApplication(sys.argv)
 
     if uirun():
         return
 
     if not scriptrun():
-        Popen(["GamzScript.exe"])
+        Popen([str(dr() / GamzScript())])
 
     window = MainWindow()
     window.show()
 
-    exit(app.exec_())
+    sys.exit(app.exec_())
 
 if __name__ == "__main__":
     main()

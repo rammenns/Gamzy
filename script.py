@@ -3,19 +3,31 @@ from bs4 import BeautifulSoup
 from datetime import datetime, timedelta, timezone
 from random import uniform
 from time import sleep
-import os
-from os.path import exists
-from winotify import Notification, audio
+from pathlib import Path
+from desktop_notifier import DesktopNotifier, Button
 import sys
 import httpx
 import asyncio
 from requests import Session, get
 import json
+import platform
+syst = platform.system()
+if syst not in {"Windows", "Darwin", "Linux"}:
+    print(f"Unsupported operating system: {syst}")
+    sys.exit(1)
 
 def dr():
     if getattr(sys, "frozen", False):
-        return os.path.dirname(sys.executable)
-    return os.path.dirname(os.path.abspath(__file__))
+        return Path(sys.executable).parent
+    return Path(__file__).resolve().parent
+
+def Gamzy():
+
+    if syst == "Windows":
+        exec = "Gamzy.exe"
+    else:
+        exec = "Gamzy"
+    Popen([str(dr() / exec)])
 
 def namecut(nam):
     inval = '<>:"/\\|?*'
@@ -34,7 +46,7 @@ async def mainscript(gmz, conngmz):
         platforms = []
         fail = []
 
-        def insertnremove():
+        async def insertnremove():
 
             print("\033[1m Attempting to update database: \033[0m")
             print("")
@@ -55,7 +67,7 @@ async def mainscript(gmz, conngmz):
                     if i is None:
                         continue
                     if image == "" and imgs[i] != "":
-                        gmz.execute("UPDATE games SET image = ? WHERE link = ?", (imgs[i], link))
+                        gmz.execute("UPDATE games SET image = ? WHERE link = ?", (str(imgs[i]), link))
             else:
                 gmz.execute("DELETE FROM games")
             conngmz.commit()
@@ -64,7 +76,7 @@ async def mainscript(gmz, conngmz):
             for test in range(len(links)):
                 gmz.execute(
                     "INSERT OR IGNORE INTO games (link, name, image, platform) VALUES (?, ?, ?, ?)",
-                    (links[test], names[test], imgs[test], platforms[test])
+                    (links[test], names[test], str(imgs[test]), platforms[test])
                 )
                 if gmz.rowcount > 0:
                     if platforms[test] not in silencedones:
@@ -74,7 +86,7 @@ async def mainscript(gmz, conngmz):
             conngmz.commit()
 
             try:
-                checkpth = os.path.join(dr(), "check.db")
+                checkpth = str(dr() / "check.db")
                 conncheck = connect(checkpth, timeout = 10)
                 chk = conncheck.cursor()
             except:
@@ -105,45 +117,37 @@ async def mainscript(gmz, conngmz):
 
             if thisissil is None or thisissil < len(silencedones):
                 if getattr(sys, "frozen", False):
-                    base = sys._MEIPASS
+                    base = Path(sys._MEIPASS)
                 else:
-                    base = os.path.dirname(os.path.abspath(__file__))
+                    base = Path(__file__).resolve().parent
 
-                notif = Notification(
-                    app_id = "Gamzy",
-                    title = "🎮New Gamz!",
-                    msg = "Hey! There are new games waiting for you!",
-                    duration = "long",
-                    icon = os.path.join(base,"AppLogo.png")
-                )
-                notif.add_actions(
-                    label="Open",
-                    launch=os.path.join(dr(), "Gamzy.exe")
-                )
-                notif.set_audio(audio.Reminder, loop=False)
-                notif.show()
+                notif = DesktopNotifier()
 
-            folder = os.path.join(dr(), "gamzimgs/")
+                await notif.send(
+                    title = "Gamzy",
+                    message = "Hey! There are new games waiting for you!",
+                    icon = dr() / "AppLogo.png",
+                    buttons = [
+                        Button(
+                            title = "Open",
+                            on_pressed = Gamzy,
+                        )
+                    ]
+                )
+
+            folder = dr() / "gamzimgs"
 
             gmz.execute("SELECT image FROM games")
-            dbimgs = {rowaw[0] for rowaw in gmz.fetchall()}
+            dbimgs = {Path(rowaw[0]).name for rowaw in gmz.fetchall()}
 
-            for file in os.listdir(folder):
-                file_path = os.path.join(folder, file)
-
-                if file_path not in dbimgs and file not in {"steamlogo.png", "epiclogo.png", "goglogo.png", "itchlogo.png"}:
-                    os.remove(file_path)
+            for file in folder.iterdir():
+                if file.name not in dbimgs and file.name not in {"steamlogo.png", "epiclogo.png", "goglogo.png", "itchlogo.png"}:
+                    file.unlink()
 
             print("Database updated    \033[92m SUCCESS \033[0m")
             print("")
 
-
-        headers = {
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Encoding": "gzip, deflate, br, zstd",
-            "Accept-Language": "en-US,en;q=0.9",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:152.0) Gecko/20100101 Firefox/152.0"
-        }
+            await asyncio.sleep(10)
 
 
 
@@ -201,9 +205,9 @@ async def mainscript(gmz, conngmz):
                                                         if steamgam:
                                                             steamurl = steamgam.get('src')
                                                             if steamurl:
-                                                                steamext = os.path.splitext(steamurl)[1].split("?")[0]
-                                                                steamfile = os.path.join(dr(), f"gamzimgs/{namecut(steamnam)}{steamext}")
-                                                                if not exists(steamfile):
+                                                                steamext = Path(steamurl.split("?")[0]).suffix
+                                                                steamfile = dr() / "gamzimgs" / f"{namecut(steamnam)}{steamext}"
+                                                                if not steamfile.exists():
                                                                     steamimgresp = await steam.get(steamurl)
                                                                     steamimgresp.raise_for_status()
                                                                     with open(steamfile, "wb") as f:
@@ -269,9 +273,9 @@ async def mainscript(gmz, conngmz):
                                             if goggam:
                                                 gogurl = goggam.split(", ")[1].rsplit(" ", 1)[0]
                                                 if gogurl:
-                                                    gogext = os.path.splitext(gogurl)[1].split("?")[0]
-                                                    gogfile = os.path.join(dr(), f"gamzimgs/{namecut(gognam)}{gogext}")
-                                                    if not exists(gogfile):
+                                                    gogext = Path(gogurl.split("?")[0]).suffix
+                                                    gogfile = dr() / "gamzimgs" / f"{namecut(gognam)}{gogext}"
+                                                    if not gogfile.exists():
                                                         gogimgresp = await gog.get(gogurl)
                                                         gogimgresp.raise_for_status()
                                                         with open(gogfile, "wb") as f:
@@ -359,11 +363,11 @@ async def mainscript(gmz, conngmz):
                                                 epicfile = ""
                                                 if epicgam["keyImages"][0]["url"]:
                                                     epicurl = epicgam["keyImages"][0]["url"]
-                                                    epicext = os.path.splitext(epicurl)[1].split("?")[0]
+                                                    epicext = Path(epicurl.split("?")[0]).suffix
                                                     if not epicext:
                                                         epicext = ".png"
-                                                    epicfile = os.path.join(dr(), f"gamzimgs/{namecut(epicnam)}{epicext}")
-                                                    if not exists(epicfile):
+                                                    epicfile = dr() / "gamzimgs" / f"{namecut(epicnam)}{epicext}"
+                                                    if not epicfile.exists():
                                                         epicimgresp = epic.get(epicurl)
                                                         epicimgresp.raise_for_status()
                                                         with open(epicfile, "wb") as f:
@@ -444,9 +448,9 @@ async def mainscript(gmz, conngmz):
                                                     if itchgamn:
                                                         itchurl = itchgamn.get("data-lazy_src")
                                                         if itchurl:
-                                                            itchext = os.path.splitext(itchurl)[1].split("?")[0]
-                                                            itchfile = os.path.join(dr(), f"gamzimgs/{namecut(itchnam)}{itchext}")
-                                                            if not exists(itchfile):
+                                                            itchext = Path(itchurl.split("?")[0]).suffix
+                                                            itchfile = dr() / "gamzimgs" / f"{namecut(itchnam)}{itchext}"
+                                                            if not itchfile.exists():
                                                                 itchimgresp = await itch.get(itchurl)
                                                                 itchimgresp.raise_for_status()
                                                                 with open(itchfile, "wb") as f:
@@ -480,7 +484,7 @@ async def mainscript(gmz, conngmz):
 
         assert len(links) == len(names) == len(imgs) == len(platforms)
 
-        insertnremove()
+        await insertnremove()
 
         return True
 
@@ -504,7 +508,7 @@ def main():
     chk = None
 
     try:
-        safepth = os.path.join(dr(), "safe.db")
+        safepth = str(dr() / "safe.db")
         connsafe = connect(safepth)
         safe = connsafe.cursor()
         safe.execute("CREATE TABLE IF NOT EXISTS safety (safe BOOLEAN)")
@@ -516,7 +520,7 @@ def main():
             safe.execute("UPDATE safety SET safe = ?", (False,))
         connsafe.commit()
 
-        checkpth = os.path.join(dr(), "check.db")
+        checkpth = str(dr() / "check.db")
         conncheck = connect(checkpth)
         chk = conncheck.cursor()
 
@@ -549,14 +553,14 @@ def main():
         conncheck.close()
         conncheck = None
 
-        timerpth = os.path.join(dr(), "timer.db")
+        timerpth = str(dr() / "timer.db")
         conntmr = connect(timerpth)
-        gamespth = os.path.join(dr(), "games.db")
+        gamespth = str(dr() / "games.db")
         conngmz = connect(gamespth, timeout = 10)
 
-        gimgpth = os.path.join(dr(), "gamzimgs")
-        if not os.path.exists(gimgpth):
-            os.makedirs(gimgpth)
+        gimgpth = dr() / "gamzimgs"
+        if not gimgpth.exists():
+            gimgpth.mkdir()
             print("\033[1m Folder created \033[0m")
             print("")
 
