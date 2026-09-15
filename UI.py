@@ -1,30 +1,64 @@
+import platform
+from PyQt5.QtWidgets import QApplication, QMessageBox
 import sys
-from sqlite3 import connect
-from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy, QScrollArea, QPushButton, QProgressBar, QCheckBox, QToolButton, QMenu, QWidgetAction
-from PyQt5.QtGui import QIcon, QPixmap, QFontDatabase, QFont, QGuiApplication, QCursor
+from pathlib import Path
+syst = platform.system()
+if syst == "Windows":
+    from ctypes import windll
+elif syst == "Linux":
+    from shutil import which
+elif syst == "Darwin":
+    from PyQt5.QtCore import QSize
+else:
+    app = QApplication(sys.argv)
+    QMessageBox.critical(
+        None,
+        "Gamzy",
+        f"Unsupported operating system: {syst}\n\nBut I can fix this if you ask nicely :3"
+    )
+    sys.exit(1)
+archit = platform.machine().lower()
+if archit == "amd64": archit = "x86_64"
+elif archit in ("aarch64", "arm64"): archit = "ARM64"
+from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy, QScrollArea, QPushButton, QProgressBar, QCheckBox, QToolButton, QMenu, QWidgetAction, QMessageBox
+from PyQt5.QtGui import QIcon, QPixmap, QFontDatabase, QFont
 from PyQt5.QtCore import Qt, QTimer
 from webbrowser import open_new_tab
 from requests import get
 import subprocess
-import os
-from ctypes import windll
 import tempfile
-
+from sqlite3 import connect
 
 def pathfind(f):
     if getattr(sys, "frozen", False):
-        base = sys._MEIPASS
+        base = Path(sys._MEIPASS)
     else:
-        base = os.path.dirname(os.path.abspath(__file__))
-    return os.path.join(base, f)
+        base = Path(__file__).resolve().parent
+    return base / f
+
+def dbdr():
+    if not getattr(sys, "frozen", False):
+        return Path(__file__).resolve().parent
+    elif syst == "Windows":
+        stuffpth = Path.home() / "AppData" / "Roaming" / "Gamzy"
+    elif syst == "Linux":
+        stuffpth = Path.home() / ".local" / "share" / "Gamzy"
+    else:
+        stuffpth = Path.home() / "Library" / "Application Support" / "Gamzy"
+    stuffpth.mkdir(parents=True, exist_ok=True)
+    return stuffpth
 
 def dr():
     if getattr(sys, "frozen", False):
-        return os.path.dirname(sys.executable)
-    return os.path.dirname(os.path.abspath(__file__))
+        return Path(sys.executable).parent
+    return Path(__file__).resolve().parent
 
 def updatepth():
-    return os.path.join(tempfile.gettempdir(), "update.exe")
+    if syst == "Windows":
+        return Path(tempfile.gettempdir()) / "update.exe"
+    elif syst == "Darwin":
+        return Path(tempfile.gettempdir()) / "update.dmg"
+    return None
 
 class updatebutton(QPushButton):
     def __init__(self, font, newver):
@@ -41,6 +75,9 @@ class updatebutton(QPushButton):
         self.progress.setGeometry(125, 75, 650, 25)
         self.progress.setTextVisible(False)
         self.progress.hide()
+
+        if not getattr(sys, "frozen", False):
+            self.setEnabled(False)
 
         self.setStyleSheet("""
             QPushButton{
@@ -70,18 +107,34 @@ class updatebutton(QPushButton):
 
         self.setEnabled(False)
 
+        scriptpth = None
+        shellpth = None
+
+        if syst == "Darwin" and not Path("/Applications/Gamzy.app").exists():
+            QMessageBox.information(
+                self,
+                "Function Denied",
+                "Gamzy needs to be in the Applications folder"
+            )
+            return
+
         try:
 
-            try:
-                os.remove(updatepth())
-            except FileNotFoundError:
-                pass
-            except PermissionError:
-                pass
+            if syst != "Linux":
+                try:
+                    updatepth().unlink()
+                except FileNotFoundError:
+                    pass
+                except PermissionError:
+                    pass
+            elif which("pkexec") is None:
+                self.setText("pkexec is required for updates")
+                self.setEnabled(True)
+                return
 
             url = get("https://api.github.com/repos/rammenns/Gamzy/releases/latest", timeout=5)
             if url.status_code != 200:
-                self.setText("Update failed :( Try again")
+                self.setText("Connection lost :( Try again")
                 self.setEnabled(True)
                 return
 
@@ -89,7 +142,7 @@ class updatebutton(QPushButton):
             downl= None
 
             for asset in new['assets']:
-                if asset["name"].endswith(".exe"):
+                if (syst == "Windows" and asset["name"].endswith(".exe")) or (syst == "Darwin" and asset["name"].endswith(".dmg")) or (syst == "Linux" and asset["name"].endswith(".tar.gz")):
                     downl = asset["browser_download_url"]
                     break
 
@@ -108,7 +161,18 @@ class updatebutton(QPushButton):
             total = int(file.headers.get("content-length", 0))
             downloaded = 0
 
-            with open(updatepth(), "wb") as f:
+            if syst == "Windows":
+                scriptpth = updatepth()
+
+            elif syst == "Darwin":
+                scriptpth = updatepth()
+                shellpth = dbdr() / "update.sh"
+
+            elif syst == "Linux":
+                scriptpth = dbdr() / "update.tar.gz"
+                shellpth = dbdr() / "update.sh"
+
+            with open(str(scriptpth), "wb") as f:
                 for chunk in file.iter_content(8192):
                     if chunk:
                         f.write(chunk)
@@ -125,12 +189,20 @@ class updatebutton(QPushButton):
             self.setText("Installing...")
             QApplication.processEvents()
 
-            safepth = os.path.join(dr(), "safe.db")
-            connsafe = connect(safepth, timeout=10)
+            safepth = str(dbdr() / "safe.db")
+            connsafe = connect(f"file:{safepth}?mode=ro", uri=True, timeout=10)
             safe = connsafe.cursor()
             safe.execute("SELECT safe FROM safety")
             row = safe.fetchone()
-            if not row or not row[0]:
+            if row:
+                while not row[0]:
+                    sleep(10)
+                    try:
+                        safe.execute("SELECT safe FROM safety")
+                        row = safe.fetchone()
+                    except:
+                        pass
+            else:
                 connsafe.close()
                 self.setText("Woops, small error :( Try again in a few seconds")
                 self.progress.hide()
@@ -139,34 +211,187 @@ class updatebutton(QPushButton):
 
             connsafe.close()
 
-            subprocess.run(
-                [
-                    "taskkill",
-                    "/F",
-                    "/IM",
-                    "GamzScript.exe"
-                ],
-                capture_output=True
-            )
+            safepth = None
+            connsafe = None
+            safe = None
+            row = None
 
-            permission = windll.shell32.ShellExecuteW(
-                None,
-                "runas",
-                updatepth(),
-                "/SILENT /NORESTART",
-                None,
-                1
-            )
-            if permission <= 32:
-                self.setText("Update cancelled :( Try again?")
-                self.progress.hide()
-                self.setEnabled(True)
-                subprocess.Popen(["GamzScript.exe"])
-                return
+            if syst == "Windows":
+
+                subprocess.run(
+                    [
+                        "taskkill",
+                        "/F",
+                        "/IM",
+                        "GamzScript.exe"
+                    ],
+                    capture_output=True
+                )
+
+                permission = windll.shell32.ShellExecuteW(
+                    None,
+                    "runas",
+                    scriptpth,
+                    "/SILENT /NORESTART",
+                    None,
+                    1
+                )
+                if permission <= 32:
+                    try:
+                        updatepth().unlink()
+                    except FileNotFoundError:
+                        pass
+                    except PermissionError:
+                        pass
+                    self.setText("Update canceled :( Try again?")
+                    self.progress.hide()
+                    self.setEnabled(True)
+                    subprocess.Popen([str(dr() / "GamzScript.exe")])
+                    return
+
+            elif syst == "Darwin":
+
+                check = subprocess.run(
+                    [
+                        "hdiutil",
+                        "verify",
+                        str(updatepth())
+                    ],
+                    capture_output=True
+                )
+
+                if check.returncode != 0:
+                    self.setText("Update failed :( Try again?")
+                    self.progress.hide()
+                    self.setEnabled(True)
+                    return
+
+                subprocess.run(
+                    [
+                        "pkill",
+                        "-f",
+                        "GamzScript"
+                    ],
+                    capture_output=True
+                )
+
+                script = f"""#!/bin/sh
+(
+sleep 5
+
+MOUNT="/tmp/GamzyUpdateMount"
+
+mkdir -p "$MOUNT"
+
+if ! hdiutil attach "{updatepth()}" -mountpoint "$MOUNT" -nobrowse; then
+    exit 1
+fi
+
+rm -rf "/Applications/Gamzy.app"
+if ! cp -R "$MOUNT/Gamzy.app" "/Applications/Gamzy.app"; then
+    hdiutil detach "$MOUNT"
+    exit 1
+fi
+
+hdiutil detach "$MOUNT"
+
+rm -f "{updatepth()}"
+
+open "/Applications/Gamzy.app"
+
+) >/dev/null 2>&1 &
+
+exit 0
+"""
+                with open(shellpth, "w") as f:
+                    f.write(script)
+
+                subprocess.run(["chmod", "+x", str(shellpth)])
+
+                applescript = '''
+on run argv
+    do shell script quoted form of (item 1 of argv) with administrator privileges
+end run
+'''
+
+                permission = subprocess.run(
+                    [
+                        "osascript",
+                        "-e",
+                        applescript,
+                        str(shellpth)
+                    ],
+                    capture_output=True,
+                    text=True
+                )
+
+                if permission.returncode != 0:
+                    try:
+                        updatepth().unlink()
+                    except FileNotFoundError:
+                        pass
+                    except PermissionError:
+                        pass
+                    self.setText("Update canceled :( Try again?")
+                    self.progress.hide()
+                    self.setEnabled(True)
+                    subprocess.Popen([str(dr() / "GamzScript")])
+                    return
+
+            elif syst == "Linux":
+
+                subprocess.run(
+                    [
+                        "pkill",
+                        "-f",
+                        "GamzScript"
+                    ],
+                    capture_output=True
+                )
+
+                script = f"""#!/bin/sh
+sleep 2
+
+cd "{dr()}"
+
+mkdir -p .update
+
+tar -xzf update.tar.gz -C .update
+
+cp -rf .update/Gamzy/* .
+
+chmod +x Gamzy
+chmod +x GamzScript
+chmod +x "Create Shortcut.sh"
+
+rm update.tar.gz
+rm -rf .update
+
+exec ./Gamzy
+"""
+                with open(shellpth, "w") as f:
+                    f.write(script)
+
+                subprocess.run(["chmod", "+x", str(shellpth)])
+
+                permission = subprocess.run(["pkexec", str(shellpth)], capture_output = True, text = True)
+
+                if permission.returncode != 0:
+                    try:
+                        scriptpth.unlink()
+                    except FileNotFoundError:
+                        pass
+                    except PermissionError:
+                        pass
+                    self.setText("Update canceled :( Try again?")
+                    self.progress.hide()
+                    self.setEnabled(True)
+                    subprocess.Popen([str(dr() / "GamzScript")])
+                    return
 
             QApplication.quit()
 
-        except:
+        except Exception:
             self.setText("Update failed :( Try again")
             self.progress.hide()
             self.setEnabled(True)
@@ -194,7 +419,6 @@ class gamUI(QWidget):
         layout = QHBoxLayout(self)
         layout.setAlignment(Qt.AlignVCenter)
         datalayout = QVBoxLayout()
-        newlayout = QVBoxLayout()
 
         self.imglabel = QLabel(self)
         imagemap = QPixmap(image)
@@ -210,7 +434,7 @@ class gamUI(QWidget):
         self.baseFont.setPointSize(10)
 
         platformlabel = QLabel(self)
-        platformmap = QPixmap(pathfind(platform))
+        platformmap = QPixmap(str(pathfind(platform)))
         scale = platformmap.scaledToHeight(50, Qt.SmoothTransformation)
         platformlabel.setPixmap(scale)
 
@@ -274,13 +498,14 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Gamzy")
         self.setFixedSize(1000, 415)
         self.move(510, 350)
-        self.setWindowIcon(QIcon(pathfind("AppLogo.png")))
+        if syst != "Darwin":
+            self.setWindowIcon(QIcon(str(pathfind("gamzylogo.png"))))
         self.setObjectName("window")
 
         central = QWidget()
         self.setCentralWidget(central)
 
-        namefont = QFontDatabase.addApplicationFont(pathfind("Minecraftia-Regular.ttf"))
+        namefont = QFontDatabase.addApplicationFont(str(pathfind("Minecraftia-Regular.ttf")))
         fontfam = QFontDatabase.applicationFontFamilies(namefont)
         if fontfam:
             self.basefont = QFont(fontfam[0], 10)
@@ -292,7 +517,7 @@ class MainWindow(QMainWindow):
         checkpth = None
         conncheck = None
         try:
-            checkpth = os.path.join(dr(), "check.db")
+            checkpth = str(dbdr() / "check.db")
             conncheck = connect(checkpth, timeout = 180)
             chk = conncheck.cursor()
         except:
@@ -315,21 +540,40 @@ class MainWindow(QMainWindow):
             chk.execute("INSERT INTO checks(platform) VALUES (?)", ("GOG",))
             chk.execute("INSERT INTO checks(platform) VALUES (?)", ("itch.io",))
             chk.execute("INSERT INTO checks(platform) VALUES (?)", ("Old",))
+            chk.execute("INSERT INTO checks(platform) VALUES (?)", ("Ubisoft",))
 
-            chk.execute("SELECT platform, hide, silence FROM checks")
-            rows = chk.fetchall()
-
-        ####################################################################
-        try:
-            chk.execute("INSERT INTO checks(platform) VALUES (?)", ("Old",))
-            conncheck.commit()
-            chk.execute("SELECT platform, hide, silence FROM checks")
-            rows = chk.fetchall()
-        except:
-            pass
-        ####################################################################
+        ##############################################################################
+        chk.execute("INSERT OR IGNORE INTO checks(platform) VALUES (?)", ("Old",))
+        chk.execute("INSERT OR IGNORE INTO checks(platform) VALUES (?)", ("Ubisoft",))
+        ##############################################################################
 
         conncheck.commit()
+
+        chk.execute("SELECT platform, hide, silence FROM checks")
+        rows = chk.fetchall()
+
+        if syst == "Darwin":
+            if not Path("/Applications/Gamzy.app").exists():
+                QMessageBox.critical(
+                    None,
+                    "Attention!",
+                    "Move Gamzy into the Applications folder in order to function properly."
+                )
+            self.biutuon = QPushButton()
+            self.biutuon.setIcon(QIcon(str(Path(sys.executable).parent.parent / "Resources" / "uninstall.png")))
+            self.biutuon.setIconSize(QSize(36, 36))
+            self.biutuon.setFixedSize(36, 36)
+            self.biutuon.setStyleSheet("""
+                QPushButton {
+                    border: none;
+                    background: transparent;
+                }
+            """)
+            self.biutuon.clicked.connect(self.uninstallconfirm)
+            delbut = QHBoxLayout()
+            delbut.addWidget(self.biutuon)
+            delbut.setAlignment(Qt.AlignRight)
+            layout.addLayout(delbut)
 
         self.hidedropdown = QToolButton()
         self.hidedropdown.setText("Hide    >")
@@ -373,6 +617,8 @@ class MainWindow(QMainWindow):
         scroll.setWidget(scrollgamz)
         layout.addWidget(scroll)
 
+        self.storedgamz = []
+
         p = self.creategamz(updt)
 
         self.timer = QTimer(self)
@@ -386,6 +632,43 @@ class MainWindow(QMainWindow):
         self.applyScale()
 
         scrollgamz.setStyleSheet("background-color: #424242;")
+
+    def uninstallconfirm(self):
+
+        if Path("/Applications/Gamzy.app").exists():
+
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Uninstall Gamzy")
+            msg.setText("Do you want to uninstall Gamzy?")
+
+            yes = msg.addButton("Yes", QMessageBox.YesRole)
+            cancel = msg.addButton("Cancel", QMessageBox.NoRole)
+
+            msg.exec_()
+
+            if msg.clickedButton() == yes:
+                source = Path(sys.executable).parent.parent / "Resources" / "uninstall.sh"
+                uninstall = Path(tempfile.gettempdir()) / "gamzy-uninstall.sh"
+
+                try:
+                    uninstall.write_bytes(source.read_bytes())
+                    subprocess.run(["chmod", "+x", str(uninstall)], check=True)
+                    subprocess.Popen([str(uninstall)])
+                    QApplication.quit()
+                except Exception:
+                    QMessageBox.critical(
+                        self,
+                        "Uninstall failed",
+                        "Gamzy could not start the uninstall process. :("
+                    )
+
+        else:
+
+            QMessageBox.information(
+                self,
+                "Function Denied",
+                "Gamzy needs to be in the Applications folder"
+            )
 
     def createmenus(self):
 
@@ -416,6 +699,13 @@ class MainWindow(QMainWindow):
         goghide_action.setDefaultWidget(hidegog)
         self.hidemenu.addAction(goghide_action)
         hidegog.toggled.connect(lambda checked: self.togg("GOG", True, checked))
+
+        hideubi = QCheckBox("Ubisoft")
+        hideubi.setChecked(presets.get("Ubisoft", {}).get("hide", False))
+        ubihide_action = QWidgetAction(self)
+        ubihide_action.setDefaultWidget(hideubi)
+        self.hidemenu.addAction(ubihide_action)
+        hideubi.toggled.connect(lambda checked: self.togg("Ubisoft", True, checked))
 
         hideitch = QCheckBox("itch.io")
         hideitch.setChecked(presets.get("itch.io", {}).get("hide", False))
@@ -457,6 +747,13 @@ class MainWindow(QMainWindow):
         self.silmenu.addAction(gogsil_action)
         silgog.toggled.connect(lambda checked: self.togg("GOG", False, checked))
 
+        silubi = QCheckBox("Ubisoft")
+        silubi.setChecked(presets.get("Ubisoft", {}).get("silence", False))
+        ubisil_action = QWidgetAction(self)
+        ubisil_action.setDefaultWidget(silubi)
+        self.silmenu.addAction(ubisil_action)
+        silubi.toggled.connect(lambda checked: self.togg("Ubisoft", False, checked))
+
         silitch = QCheckBox("itch.io")
         silitch.setChecked(presets.get("itch.io", {}).get("silence", False))
         itchsil_action = QWidgetAction(self)
@@ -466,7 +763,7 @@ class MainWindow(QMainWindow):
 
 
     def togg(self, plat, wh, ch):
-        checkpth = os.path.join(dr(), "check.db")
+        checkpth = str(dbdr() / "check.db")
         conncheck = connect(checkpth, timeout = 180)
         chk = conncheck.cursor()
         if wh:
@@ -503,15 +800,28 @@ class MainWindow(QMainWindow):
                 "User-Agent": "Gamzy"
             }
             try:
-                url = get("https://api.github.com/repos/rammenns/Gamzy/releases/latest",headers = headers, timeout = 5)
+                url = get("https://api.github.com/repos/rammenns/Gamzy/releases", headers = headers, timeout = 5)
                 url.raise_for_status()
-                ver = url.json()
-                if ver["tag_name"] != "1.8":
-                    self.scrolyout.addWidget(updatebutton(self.basefont, ver["tag_name"]))
+                releases = url.json()
+                upstop = False
+                for ver in releases:
+                    if upstop:
+                        break
+                    if ver["tag_name"] != "1.9":
+                        if ver["draft"] or ver["prerelease"]:
+                            continue
+                        tag_name = ver["tag_name"]
+                        for asset in ver['assets']:
+                            if ((syst == "Windows" and asset["name"].endswith(".exe")) or (syst == "Darwin" and asset["name"].endswith(".dmg")) or (syst == "Linux" and asset["name"].endswith(".tar.gz")) and (archit in asset["name"])):
+                                self.scrolyout.addWidget(updatebutton(self.basefont, tag_name))
+                                upstop = True
+                                break
+                    else:
+                        upstop = True
             except:
                 pass
 
-        checkpth = os.path.join(dr(), "check.db")
+        checkpth = str(dbdr() / "check.db")
         conncheck = connect(checkpth, timeout = 180)
         chk = conncheck.cursor()
 
@@ -524,13 +834,14 @@ class MainWindow(QMainWindow):
         goghide = rows[2][0]
         ithide = rows[3][0]
         oldhide = rows[4][0]
+        ubihide = rows[5][0]
 
 
         conn = None
         cursor = None
         try:
-            gamespth = os.path.join(dr(), "games.db")
-            conn = connect(gamespth, timeout = 10)
+            gamespth = str(dbdr() / "games.db")
+            conn = connect(f"file:{gamespth}?mode=ro", uri=True, timeout = 10)
             cursor = conn.cursor()
         except:
             return False
@@ -539,10 +850,11 @@ class MainWindow(QMainWindow):
             cursor.execute("""
                 SELECT link, image, name, platform, new FROM games
                 ORDER BY CASE platform
-                    WHEN 'goglogo.png' THEN 1
-                    WHEN 'steamlogo.png' THEN 2
-                    WHEN 'epiclogo.png' THEN 3
-                    WHEN 'itchlogo.png' THEN 4
+                    WHEN 'ubilogo.png' THEN 1
+                    WHEN 'goglogo.png' THEN 2
+                    WHEN 'steamlogo.png' THEN 3
+                    WHEN 'epiclogo.png' THEN 4
+                    WHEN 'itchlogo.png' THEN 5
                 END,
                 new DESC,
                 name
@@ -551,13 +863,16 @@ class MainWindow(QMainWindow):
         except:
             rows = []
 
+        self.storedgamz = []
 
         for link, image, name, platform, new in rows:
             if len(name) > 43:
                 name = name[:40] + "..."
             if oldhide and not new:
                 continue
-            if goghide and platform == "goglogo.png":
+            if ubihide and platform == "ubilogo.png":
+                continue
+            elif goghide and platform == "goglogo.png":
                 continue
             elif sthide and platform == "steamlogo.png":
                 continue
@@ -569,6 +884,7 @@ class MainWindow(QMainWindow):
             font.setPointSize(self.uiscale(10))
             card = gamUI(link, image, name, platform, new, font, self.currdpi)
             self.scrolyout.addWidget(card)
+            self.storedgamz.append(link)
 
 
         conn.close()
@@ -700,20 +1016,42 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
 
-        try:
-            conn = connect(gamespth, timeout=10)
-            cursor = conn.cursor()
+        if not self.storedgamz: return
 
-            cursor.execute("UPDATE games SET seen = ?", (True,))
+        safepth = str(dbdr() / "safe.db")
+        connsafe = connect(f"file:{safepth}?mode=ro", uri=True, timeout=10)
+        safe = connsafe.cursor()
+        safe.execute("SELECT safe FROM safety")
+        row = safe.fetchone()
+        if row:
+            while not row[0]:
+                sleep(10)
+                try:
+                    safe.execute("SELECT safe FROM safety")
+                    row = safe.fetchone()
+                except:
+                    pass
+        else:
+            connsafe.close()
+            return
+        connsafe.close()
 
-            conn.close()
-        except:
-            pass
+        gamespth = str(dbdr() / "games.db")
+        conn = connect(gamespth, timeout = 10)
+        cursor = conn.cursor()
+
+        pholder = ",".join("?" for _ in self.storedgamz)
+
+        cursor.execute(f"UPDATE games SET new = ? WHERE link IN ({pholder})", (False, *self.storedgamz))
+        conn.commit()
+
+        conn.close()
 
 
 def main():
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
+
     window = MainWindow()
     window.show()
     sys.exit(app.exec_())
