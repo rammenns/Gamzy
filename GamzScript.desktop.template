@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=GamzScript
+Comment=Gamzy background game sniffer
+Exec="scripth"
+Terminal=false
+X-GNOME-Autostart-enabled=true
