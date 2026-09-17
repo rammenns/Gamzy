@@ -1,0 +1,19 @@
+#!/bin/sh
+sleep 2
+
+cd "apth"
+
+mkdir -p .update
+
+tar -xzf update.tar.gz -C .update
+
+cp -rf .update/Gamzy/* .
+
+chmod +x Gamzy
+chmod +x GamzScript
+chmod +x "Create Shortcut.sh"
+
+rm update.tar.gz
+rm -rf .update
+
+exec ./Gamzy
