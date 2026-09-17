@@ -1,0 +1,129 @@
+name: Build
+
+on:
+  workflow_dispatch:
+
+jobs:
+
+  # Windows x86-64
+
+  windows-x64:
+    runs-on: windows-2025
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build
+        run: |
+          pyinstaller --onefile --windowed main.py
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gamzy-Windows-x64
+          path: dist/main.exe
+
+
+  # Windows ARM64
+  
+  windows-arm64:
+    runs-on: windows-11-arm
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build
+        run: |
+          pyinstaller --onefile --windowed main.py
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gamzy-Windows-ARM64
+          path: dist/main.exe
+
+
+  # Linux x86-64
+  
+  linux-x64:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build
+        run: |
+          pyinstaller --onefile main.py
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gamzy-Linux-x64
+          path: dist/main
+
+
+  # Linux ARM64
+  
+  linux-arm64:
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build
+        run: |
+          pyinstaller --onefile main.py
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gamzy-Linux-ARM64
+          path: dist/main
