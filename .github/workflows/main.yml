@@ -151,8 +151,9 @@ jobs:
       - name: Install Build Tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y qt5-qmake qtbase5-dev qtbase5-dev-tools
-          echo "/usr/lib/qt5/bin" >> "$GITHUB_PATH"
+          sudo apt-get install -y qt5-qmake qt5-qmake-bin qtbase5-dev qtbase5-dev-tools
+          sudo ln -sf /usr/lib/qt5/bin/qmake /usr/local/bin/qmake
+          which qmake
           qmake -v
 
       - name: Install dependencies
