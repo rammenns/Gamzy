@@ -132,7 +132,11 @@ class updatebutton(QPushButton):
                 self.setEnabled(True)
                 return
 
-            url = get("https://api.github.com/repos/rammenns/Gamzy/releases/latest", timeout=5)
+            headers = {
+                "Accept": "application/vnd.github+json",
+                "User-Agent": "Gamzy"
+            }
+            url = get(f"https://api.github.com/repos/rammenns/Gamzy/releases/tags/{newver}", headers = headers, timeout = 5)
             if url.status_code != 200:
                 self.setText("Connection lost :( Try again")
                 self.setEnabled(True)
@@ -142,7 +146,17 @@ class updatebutton(QPushButton):
             downl= None
 
             for asset in new['assets']:
-                if (syst == "Windows" and asset["name"].endswith(".exe")) or (syst == "Darwin" and asset["name"].endswith(".dmg")) or (syst == "Linux" and asset["name"].endswith(".tar.gz")):
+                if (
+                    (
+                        (syst == "Windows" and asset["name"].endswith(".exe"))
+                        or
+                        (syst == "Darwin" and asset["name"].endswith(".dmg"))
+                        or
+                        (syst == "Linux" and asset["name"].endswith(".tar.gz"))
+                    )
+                    and
+                    (archit in asset["name"])
+                ):
                     downl = asset["browser_download_url"]
                     break
 
