@@ -349,28 +349,26 @@ end run
                     capture_output=True
                 )
 
-                script = f"""#!/bin/sh
-sleep 2
+                template = dr() / "GamzyUpdate.sh.template"
 
-cd "{dr()}"
+                if not template.exists():
+                    self.setText("Program error :( Please reinstall the program")
+                    self.progress.hide()
+                    self.setEnabled(True)
+                    subprocess.Popen([str(dr() / "GamzScript")])
+                    return
 
-mkdir -p .update
+                content = template.read_text(encoding="utf-8")
 
-tar -xzf update.tar.gz -C .update
+                content = content.replace(
+                    "apth",
+                    str(dr())
+                )
 
-cp -rf .update/Gamzy/* .
-
-chmod +x Gamzy
-chmod +x GamzScript
-chmod +x "Create Shortcut.sh"
-
-rm update.tar.gz
-rm -rf .update
-
-exec ./Gamzy
-"""
-                with open(shellpth, "w") as f:
-                    f.write(script)
+                shellpth.write_text(
+                    content,
+                    encoding="utf-8"
+                )
 
                 subprocess.run(["chmod", "+x", str(shellpth)])
 
