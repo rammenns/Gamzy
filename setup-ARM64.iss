@@ -29,7 +29,7 @@ ArchitecturesAllowed=arm64
 ; install be done in "64-bit mode" on x64 or Windows 11 on Arm,
 ; meaning it should use the native 64-bit Program Files directory and
 ; the 64-bit view of the registry.
-ArchitecturesInstallIn64BitMode=arm64compatible
+ArchitecturesInstallIn64BitMode=arm64
 DisableProgramGroupPage=yes
 ; Remove the following line to run in administrative install mode (install for all users).
 PrivilegesRequired=admin
