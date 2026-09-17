@@ -70,3 +70,4 @@ Filename: "schtasks.exe"; Parameters: "/Delete /F /TN ""GamzScript"""; Flags: ru
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"
+Type: filesandordirs; Name: "{userappdata}\Gamzy"
