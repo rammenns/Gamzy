@@ -263,95 +263,6 @@ class updatebutton(QPushButton):
                     subprocess.Popen([str(dr() / "GamzScript.exe")])
                     return
 
-            elif syst == "Darwin":
-
-                check = subprocess.run(
-                    [
-                        "hdiutil",
-                        "verify",
-                        str(updatepth())
-                    ],
-                    capture_output=True
-                )
-
-                if check.returncode != 0:
-                    self.setText("Update failed :( Try again?")
-                    self.progress.hide()
-                    self.setEnabled(True)
-                    return
-
-                subprocess.run(
-                    [
-                        "pkill",
-                        "-f",
-                        "GamzScript"
-                    ],
-                    capture_output=True
-                )
-
-                script = f"""#!/bin/sh
-(
-sleep 5
-
-MOUNT="/tmp/GamzyUpdateMount"
-
-mkdir -p "$MOUNT"
-
-if ! hdiutil attach "{updatepth()}" -mountpoint "$MOUNT" -nobrowse; then
-    exit 1
-fi
-
-rm -rf "/Applications/Gamzy.app"
-if ! cp -R "$MOUNT/Gamzy.app" "/Applications/Gamzy.app"; then
-    hdiutil detach "$MOUNT"
-    exit 1
-fi
-
-hdiutil detach "$MOUNT"
-
-rm -f "{updatepth()}"
-
-open "/Applications/Gamzy.app"
-
-) >/dev/null 2>&1 &
-
-exit 0
-"""
-                with open(shellpth, "w") as f:
-                    f.write(script)
-
-                subprocess.run(["chmod", "+x", str(shellpth)])
-
-                applescript = '''
-on run argv
-    do shell script quoted form of (item 1 of argv) with administrator privileges
-end run
-'''
-
-                permission = subprocess.run(
-                    [
-                        "osascript",
-                        "-e",
-                        applescript,
-                        str(shellpth)
-                    ],
-                    capture_output=True,
-                    text=True
-                )
-
-                if permission.returncode != 0:
-                    try:
-                        updatepth().unlink()
-                    except FileNotFoundError:
-                        pass
-                    except PermissionError:
-                        pass
-                    self.setText("Update canceled :( Try again?")
-                    self.progress.hide()
-                    self.setEnabled(True)
-                    subprocess.Popen([str(dr() / "GamzScript")])
-                    return
-
             elif syst == "Linux":
 
                 subprocess.run(
@@ -363,7 +274,7 @@ end run
                     capture_output=True
                 )
 
-                template = dr() / "GamzyUpdate.sh.template"
+                template = dr() / "linuxGamzyUpdate.sh.template"
 
                 if not template.exists():
                     self.setText("Program error :( Please reinstall the program")
@@ -391,6 +302,81 @@ end run
                 if permission.returncode != 0:
                     try:
                         scriptpth.unlink()
+                    except FileNotFoundError:
+                        pass
+                    except PermissionError:
+                        pass
+                    self.setText("Update canceled :( Try again?")
+                    self.progress.hide()
+                    self.setEnabled(True)
+                    subprocess.Popen([str(dr() / "GamzScript")])
+                    return
+
+            elif syst == "Darwin":
+
+                check = subprocess.run(
+                    [
+                        "hdiutil",
+                        "verify",
+                        str(updatepth())
+                    ],
+                    capture_output=True
+                )
+
+                if check.returncode != 0:
+                    self.setText("Update failed :( Try again?")
+                    self.progress.hide()
+                    self.setEnabled(True)
+                    return
+
+                subprocess.run(
+                    [
+                        "pkill",
+                        "-f",
+                        "GamzScript"
+                    ],
+                    capture_output=True
+                )
+
+                template = dr().parent / "Resources" / "GamzyUpdate.sh.template"
+
+                if not template.exists():
+                    self.setText("Program error :( Please reinstall the program")
+                    self.progress.hide()
+                    self.setEnabled(True)
+                    subprocess.Popen([str(dr() / "GamzScript")])
+                    return
+
+                content = template.read_text(encoding="utf-8")
+
+                content = content.replace(
+                    "upth",
+                    str(updatepth())
+                )
+
+                shellpth.write_text(
+                    content,
+                    encoding="utf-8"
+                )
+
+                subprocess.run(["chmod", "+x", str(shellpth)])
+
+                applescript = (dr().parent / "Resources" / "adminpriv.applescript.template").read_text(encoding="utf-8")
+
+                permission = subprocess.run(
+                    [
+                        "osascript",
+                        "-e",
+                        applescript,
+                        str(shellpth)
+                    ],
+                    capture_output=True,
+                    text=True
+                )
+
+                if permission.returncode != 0:
+                    try:
+                        updatepth().unlink()
                     except FileNotFoundError:
                         pass
                     except PermissionError:
