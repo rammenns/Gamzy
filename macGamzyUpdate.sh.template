@@ -1,0 +1,28 @@
+#!/bin/sh
+(
+sleep 5
+
+MOUNT="/tmp/GamzyUpdateMount"
+
+mkdir -p "$MOUNT"
+
+if ! hdiutil attach "upth" -mountpoint "$MOUNT" -nobrowse; then
+    exit 1
+fi
+
+rm -rf "/Applications/Gamzy.app"
+
+if ! cp -R "$MOUNT/Gamzy.app" "/Applications/Gamzy.app"; then
+    hdiutil detach "$MOUNT"
+    exit 1
+fi
+
+hdiutil detach "$MOUNT"
+
+rm -f "upth"
+
+open "/Applications/Gamzy.app"
+
+) >/dev/null 2>&1 &
+
+exit 0
