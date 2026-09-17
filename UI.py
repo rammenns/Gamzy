@@ -812,7 +812,17 @@ class MainWindow(QMainWindow):
                             continue
                         tag_name = ver["tag_name"]
                         for asset in ver['assets']:
-                            if ((syst == "Windows" and asset["name"].endswith(".exe")) or (syst == "Darwin" and asset["name"].endswith(".dmg")) or (syst == "Linux" and asset["name"].endswith(".tar.gz")) and (archit in asset["name"])):
+                            if (
+                                (
+                                    (syst == "Windows" and asset["name"].endswith(".exe"))
+                                    or
+                                    (syst == "Darwin" and asset["name"].endswith(".dmg"))
+                                    or
+                                    (syst == "Linux" and asset["name"].endswith(".tar.gz"))
+                                )
+                                and
+                                (archit in asset["name"])
+                            ):
                                 self.scrolyout.addWidget(updatebutton(self.basefont, tag_name))
                                 upstop = True
                                 break
