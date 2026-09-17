@@ -11,6 +11,7 @@ permissions:
 
 jobs:
 
+
   # Windows x86-64
 
   windows-x86_64:
@@ -25,7 +26,7 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Install dependencies
+      - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r libraries.txt
@@ -62,27 +63,28 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Install dependencies
+      - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r libraries.txt
           pip install pyinstaller
 
-      - name: Build
+      - name: Building Executables
         run: |
           pyinstaller --onefile --noconsole --add-data "gamzylogo.png;." --icon "gamzylogo.ico" --hidden-import=desktop_notifier.resources --name GamzScript script.py
           pyinstaller --onefile --noconsole --add-data "gamzylogo.png;." --add-data "steamlogo.png;." --add-data "epiclogo.png;." --add-data "goglogo.png;." --add-data "itchlogo.png;." --add-data "ubilogo.png;." --add-data "Minecraftia-Regular.ttf;." --icon "gamzylogo.ico" --name Gamzy main.py
 
-      - name: Setup
+      - name: Building Installer
         run: |
           iscc setup-ARM64.iss
       
-      - name: Upload to latest release
+      - name: Uploading Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag = gh release view --json tagName --jq .tagName
           gh release upload $tag output/Gamzy-Setup-Windows-ARM64.exe --clobber
+
 
   # Linux x86-64
   
@@ -104,15 +106,32 @@ jobs:
           pip install -r libraries.txt
           pip install pyinstaller
 
-      - name: Build
+      - name: Building Executables
         run: |
-          pyinstaller --onefile main.py
+          pyinstaller --onefile --noconsole --add-data "gamzylogo.png:." --icon "gamzylogo.ico" --hidden-import=desktop_notifier.resources --name GamzScript script.py
+          pyinstaller --onefile --noconsole --add-data "gamzylogo.png:." --add-data "steamlogo.png:." --add-data "epiclogo.png:." --add-data "goglogo.png:." --add-data "itchlogo.png:." --add-data "ubilogo.png:." --add-data "uninstall.png:." --add-data "Minecraftia-Regular.ttf:." --add-data "linuxGamzyUpdate.sh.template:." --add-data "linuxUninstall.sh:." --add-data "GamzScript.desktop.template:." --icon "gamzylogo.ico" --name Gamzy main.py
 
-      - name: Upload
-        uses: actions/upload-artifact@v4
-        with:
-          name: Gamzy-Linux-x64
-          path: dist/main
+      - name: Building Linux package
+        run: |
+          mkdir -p package/Gamzy
+          mkdir -p output
+      
+          cp dist/Gamzy package/Gamzy/
+          cp dist/GamzScript package/Gamzy/
+          cp "Create Shortcut.sh" package/Gamzy/
+      
+          chmod +x package/Gamzy/Gamzy
+          chmod +x package/Gamzy/GamzScript
+          chmod +x "package/Gamzy/Create Shortcut.sh"
+      
+          tar -czf output/Gamzy-Linux-x86_64.tar.gz -C package Gamzy
+      
+      - name: Uploading Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(gh release view --json tagName --jq .tagName)
+          gh release upload "$tag" output/Gamzy-Linux-x86_64.tar.gz --clobber
 
 
   # Linux ARM64
@@ -135,12 +154,29 @@ jobs:
           pip install -r libraries.txt
           pip install pyinstaller
 
-      - name: Build
+      - name: Building Executables
         run: |
-          pyinstaller --onefile main.py
+          pyinstaller --onefile --noconsole --add-data "gamzylogo.png:." --icon "gamzylogo.ico" --hidden-import=desktop_notifier.resources --name GamzScript script.py
+          pyinstaller --onefile --noconsole --add-data "gamzylogo.png:." --add-data "steamlogo.png:." --add-data "epiclogo.png:." --add-data "goglogo.png:." --add-data "itchlogo.png:." --add-data "ubilogo.png:." --add-data "uninstall.png:." --add-data "Minecraftia-Regular.ttf:." --add-data "linuxGamzyUpdate.sh.template:." --add-data "linuxUninstall.sh:." --add-data "GamzScript.desktop.template:." --icon "gamzylogo.ico" --name Gamzy main.py
 
-      - name: Upload
-        uses: actions/upload-artifact@v4
-        with:
-          name: Gamzy-Linux-ARM64
-          path: dist/main
+      - name: Building Linux package
+        run: |
+          mkdir -p package/Gamzy
+          mkdir -p output
+      
+          cp dist/Gamzy package/Gamzy/
+          cp dist/GamzScript package/Gamzy/
+          cp "Create Shortcut.sh" package/Gamzy/
+      
+          chmod +x package/Gamzy/Gamzy
+          chmod +x package/Gamzy/GamzScript
+          chmod +x "package/Gamzy/Create Shortcut.sh"
+      
+          tar -czf output/Gamzy-Linux-ARM64.tar.gz -C package Gamzy
+      
+      - name: Uploading Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(gh release view --json tagName --jq .tagName)
+          gh release upload "$tag" output/Gamzy-Linux-ARM64.tar.gz --clobber
