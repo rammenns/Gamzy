@@ -148,6 +148,11 @@ jobs:
         with:
           python-version: "3.13"
 
+      - name: Install Build Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qt5-qmake qtbase5-dev
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
