@@ -30,19 +30,19 @@ def autostartx():
 
         desktop = autostart / "GamzScript.desktop"
 
-        if desktop.exists() and f'Exec="{script}"' in desktop.read_text(encoding="utf-8"):
+        template = dr() / "GamzScript.desktop.template"
+
+        if not template.exists():
+            return None
+
+        content = template.read_text(encoding="utf-8")
+        content = content.replace("scripth", str(script))
+
+        if desktop.exists() and desktop.read_text(encoding="utf-8") == content:
             return None
 
         desktop.write_text(
-            f"""[Desktop Entry]
-Type=Application
-Version=1.0
-Name=GamzScript
-Comment=Gamzy background checker
-Exec="{script}"
-Terminal=False
-X-GNOME-Autostart-enabled=true
-""",
+            content,
             encoding="utf-8"
         )
 
