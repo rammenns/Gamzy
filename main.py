@@ -1,12 +1,22 @@
+import platform
 import sys
+syst = platform.system()
+if syst == "Darwin":
+    macver = int(platform.mac_ver()[0].split(".")[0])
+    if macver >= 13:
+        from ServiceManagement import SMAppService, SMAppServiceStatusEnabled, SMAppServiceStatusRequiresApproval, SMAppServiceStatusNotRegistered, SMAppServiceStatusNotFound
+    else:
+        from ServiceManagement import SMLoginItemSetEnabled
+elif syst not in {"Windows", "Linux"}:
+    print(f"Unsupported operating system: {syst}")
+    sys.exit(1)
 import subprocess
 import psutil
 from socket import socket, AF_INET, SOCK_STREAM, error
 from PyQt5.QtWidgets import QApplication
 from UI import MainWindow
-import platform
 from pathlib import Path
-syst = platform.system()
+
 oneinstance = None
 
 def dr():
@@ -14,8 +24,8 @@ def dr():
         return Path(sys.executable).parent
     return Path(__file__).resolve().parent
 
-def autostartx():
 
+def autostartx():
     if syst == "Linux":
 
         script = dr() / "GamzScript"
@@ -24,79 +34,75 @@ def autostartx():
             return None
 
         autostart = Path.home() / ".config" / "autostart"
-        autostart.mkdir(parents = True, exist_ok = True)
+        autostart.mkdir(parents=True, exist_ok=True)
 
         desktop = autostart / "GamzScript.desktop"
 
-        if desktop.exists() and f'Exec="{script}"' in desktop.read_text(encoding = "utf-8"):
+        template = dr() / "GamzScript.desktop.template"
+
+        if not template.exists():
+            return None
+
+        content = template.read_text(encoding="utf-8")
+        content = content.replace("scripth", str(script))
+
+        if desktop.exists() and desktop.read_text(encoding="utf-8") == content:
             return None
 
         desktop.write_text(
-f"""[Desktop Entry]
-Type=Application
-Version=1.0
-Name=GamzScript
-Comment=Gamzy background checker
-Exec="{script}"
-Terminal=False
-X-GNOME-Autostart-enabled=true
-""",
-            encoding = "utf-8"
+            content,
+            encoding="utf-8"
         )
 
     elif syst == "Darwin":
-    
-        if not Path("/Applications/Gamzy.app").exists():
+
+        if not getattr(sys, "frozen", False):
             return False
 
-        uid = subprocess.check_output(["id", "-u"], text=True).strip()
-        service = f"gui/{uid}/com.gamzy.GamzScript"
-
-        check = subprocess.run(
-            ["launchctl", "print", service],
-            capture_output=True
-        )
-
-        if check.returncode == 0:
+        elif not Path("/Applications/Gamzy.app").exists():
             return False
 
-        script = dr() / "GamzScript"
+        if macver >= 13:
 
-        if not script.exists():
+            service = SMAppService.loginItemServiceWithIdentifier_(
+                "com.gamzy.GamzScript"
+            )
+
+            status = service.status
+
+            if status == SMAppServiceStatusEnabled:
+                return True
+
+            elif status == SMAppServiceStatusRequiresApproval:
+                return False
+
+            elif status == SMAppServiceStatusNotRegistered or status == SMAppServiceStatusNotFound:
+                try:
+                    success, error = service.registerAndReturnError_(None)
+                    return bool(success)
+                except Exception:
+                    return False
+
             return False
 
-        launchagents = Path.home() / "Library" / "LaunchAgents"
-        launchagents.mkdir(parents=True, exist_ok=True)
+        else:
 
-        source_plist = dr().parent / "Resources" / "com.gamzy.GamzScript.plist"
-        plist = launchagents / "com.gamzy.GamzScript.plist"
-
-        try:
-            content = source_plist.read_text(encoding="utf-8")
-        except FileNotFoundError:
-            return False
-
-        content = content.replace(
-            "GamzScriptPTH",
-            str(script)
-        )
-
-        plist.write_text(content, encoding="utf-8")
-
-        hooray = subprocess.run([
-            "launchctl",
-            "bootstrap",
-            f"gui/{uid}",
-            str(plist)
-        ])
-
-        return hooray.returncode == 0
+            try:
+                return bool(
+                    SMLoginItemSetEnabled(
+                        "com.gamzy.GamzScript",
+                        True
+                    )
+                )
+            except Exception:
+                return False
 
     return None
 
 
 def gamzscript():
     return "GamzScript.exe" if syst == "Windows" else "GamzScript"
+
 
 def uirun():
     global oneinstance
@@ -107,8 +113,8 @@ def uirun():
     except error:
         return True
 
-def scriptrun():
 
+def scriptrun():
     for p in psutil.process_iter(['name']):
         try:
             if p.info['name'] == gamzscript():
@@ -117,8 +123,8 @@ def scriptrun():
             pass
     return False
 
-def main():
 
+def main():
     if uirun():
         sys.exit()
 
@@ -136,9 +142,10 @@ def main():
 
     elif syst == "Darwin":
         if not scriptrun() and not autostartx():
-            subprocess.Popen([str(dr() / gamzscript())])
+            subprocess.Popen([str(dr().parent / "Library" / "LoginItems" / "GamzScript.app" / "Contents" / "MacOS" / gamzscript())]) if getattr(sys, "frozen", False) else subprocess.Popen([str(dr() / gamzscript())])
 
     sys.exit(app.exec_())
+
 
 if __name__ == "__main__":
     main()
