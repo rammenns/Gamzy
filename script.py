@@ -15,7 +15,6 @@ from subprocess import Popen
 import httpx
 import asyncio
 from requests import Session
-import json
 
 def resourcepth(name):
     if getattr(sys, "frozen", False):
@@ -35,7 +34,10 @@ def dr():
     return stuffpth
 
 def Gamzy():
-    Popen([str((Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent) / ("Gamzy.exe" if syst == "Windows" else "Gamzy"))])
+    if syst != "Darwin":
+        Popen([str((Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent) / ("Gamzy.exe" if syst == "Windows" else "Gamzy"))])
+    else:
+        Popen(["open", str(Path(sys.executable).parents[6])])
 
 def namecut(nam):
     inval = '<>:"/\\|?*'
@@ -322,32 +324,7 @@ async def mainscript(gmz, conngmz):
 
                     epic.headers.update(epicheaders)
 
-                    epicparams = {
-                        "operationName": "searchStoreQuery",
-                        "variables": json.dumps({
-                            "allowCountries": "RO",
-                            "category": "games/edition/base|addons|bundles/games|games/demo|games/edition",
-                            "count": 40,
-                            "country": "RO",
-                            "effectiveDate": "[,2026-07-04T02:04:47.335Z]",
-                            "keywords": "",
-                            "locale": "en-US",
-                            "onSale": True,
-                            "sortBy": "currentPrice",
-                            "sortDir": "ASC",
-                            "start": 0,
-                            "tag": "",
-                            "withPrice": True
-                        }),
-                        "extensions": json.dumps({
-                            "persistedQuery": {
-                                "version": 1,
-                                "sha256Hash": "29d49ab31d438cd90be2d554d2d54704951e4223a8fcd290fcf68308841a1979"
-                            }
-                        })
-                    }
-
-                    epicresponse = epic.get("https://store.epicgames.com/graphql", params = epicparams, timeout = 5)
+                    epicresponse = epic.get("https://store.epicgames.com/graphql?operationName=searchStoreQuery&variables=%7B%22allowCountries%22:%22RO%22,%22category%22:%22games%2Fedition%2Fbase%7Caddons%7Cbundles%2Fgames%7Cgames%2Fedition%7Csubscription%22,%22count%22:40,%22country%22:%22RO%22,%22effectiveDate%22:%22[,2026-09-14T16:18:45.558Z]%22,%22keywords%22:%22%22,%22locale%22:%22en-US%22,%22onSale%22:true,%22sortBy%22:%22currentPrice%22,%22sortDir%22:%22ASC%22,%22tag%22:%22%22,%22withPrice%22:true%7D&extensions=%7B%22persistedQuery%22:%7B%22version%22:1,%22sha256Hash%22:%227d58e12d9dd8cb14c84a3ff18d360bf9f0caa96bf218f2c5fda68ba88d68a437%22%7D%7D", timeout = 5)
 
                     epicresponse.raise_for_status()
 
@@ -712,7 +689,7 @@ def main():
                             conngmz = None
 
                     now = datetime.now().timestamp()
-                    pause = timedelta(hours=uniform(12, 24))
+                    pause = timedelta(hours=uniform(2, 6))
                     tmr.execute("UPDATE timer SET nextupdate = ?", (now + pause.total_seconds(),))
                     conntmr.commit()
                     tmr.execute("SELECT nextupdate FROM timer")
@@ -737,7 +714,7 @@ def main():
                 print("")
                 safe.execute("UPDATE safety SET safe = ?", (True,))
                 connsafe.commit()
-                tmr.execute("UPDATE timer SET nextupdate = ?", (now + uniform(600, 780),))
+                tmr.execute("UPDATE timer SET nextupdate = ?", (now + uniform(600, 900),))
                 conntmr.commit()
 
     except Exception as e:
