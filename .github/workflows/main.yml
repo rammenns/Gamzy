@@ -164,7 +164,11 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install PyQt5 --config-settings --qmake=/usr/lib/qt5/bin/qmake --config-settings --confirm-license=
+      
+          python -m pip install "sip==6.16.0" "PyQt-builder"
+      
+          python -m pip install PyQt5 --no-build-isolation --config-settings="--qmake=/usr/lib/qt5/bin/qmake" --config-settings="--confirm-license="
+      
           python -m pip install -r libraries.txt
           python -m pip install pyinstaller
 
