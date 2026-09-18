@@ -156,6 +156,11 @@ jobs:
           which qmake
           qmake -v
 
+      - name: Check libraries
+        run: |
+          echo "=== libraries.txt ==="
+          cat libraries.txt
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
