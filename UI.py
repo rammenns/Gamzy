@@ -17,12 +17,14 @@ else:
         f"Unsupported operating system: {syst}\n\nBut I can fix this if you ask nicely :3"
     )
     sys.exit(1)
+archit = platform.machine().lower()
+if archit == "amd64": archit = "x86_64"
+elif archit in ("aarch64", "arm64"): archit = "ARM64"
 from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy, QScrollArea, QPushButton, QProgressBar, QCheckBox, QToolButton, QMenu, QWidgetAction, QMessageBox
 from PyQt5.QtGui import QIcon, QPixmap, QFontDatabase, QFont
 from PyQt5.QtCore import Qt, QTimer
 from webbrowser import open_new_tab
 from requests import get
-from time import sleep
 import subprocess
 import tempfile
 from sqlite3 import connect
@@ -130,7 +132,11 @@ class updatebutton(QPushButton):
                 self.setEnabled(True)
                 return
 
-            url = get("https://api.github.com/repos/rammenns/Gamzy/releases/latest", timeout=5)
+            headers = {
+                "Accept": "application/vnd.github+json",
+                "User-Agent": "Gamzy"
+            }
+            url = get(f"https://api.github.com/repos/rammenns/Gamzy/releases/tags/{newver}", headers = headers, timeout = 5)
             if url.status_code != 200:
                 self.setText("Connection lost :( Try again")
                 self.setEnabled(True)
@@ -140,7 +146,17 @@ class updatebutton(QPushButton):
             downl= None
 
             for asset in new['assets']:
-                if (syst == "Windows" and asset["name"].endswith(".exe")) or (syst == "Darwin" and asset["name"].endswith(".dmg")) or (syst == "Linux" and asset["name"].endswith(".tar.gz")):
+                if (
+                    (
+                        (syst == "Windows" and asset["name"].endswith(".exe"))
+                        or
+                        (syst == "Darwin" and asset["name"].endswith(".dmg"))
+                        or
+                        (syst == "Linux" and asset["name"].endswith(".tar.gz"))
+                    )
+                    and
+                    (archit in asset["name"])
+                ):
                     downl = asset["browser_download_url"]
                     break
 
@@ -194,7 +210,7 @@ class updatebutton(QPushButton):
             row = safe.fetchone()
             if row:
                 while not row[0]:
-                    sleep(5)
+                    sleep(10)
                     try:
                         safe.execute("SELECT safe FROM safety")
                         row = safe.fetchone()
@@ -247,6 +263,55 @@ class updatebutton(QPushButton):
                     subprocess.Popen([str(dr() / "GamzScript.exe")])
                     return
 
+            elif syst == "Linux":
+
+                subprocess.run(
+                    [
+                        "pkill",
+                        "-f",
+                        "GamzScript"
+                    ],
+                    capture_output=True
+                )
+
+                template = dr() / "linuxGamzyUpdate.sh.template"
+
+                if not template.exists():
+                    self.setText("Program error :( Please reinstall the program")
+                    self.progress.hide()
+                    self.setEnabled(True)
+                    subprocess.Popen([str(dr() / "GamzScript")])
+                    return
+
+                content = template.read_text(encoding="utf-8")
+
+                content = content.replace(
+                    "apth",
+                    str(dr())
+                )
+
+                shellpth.write_text(
+                    content,
+                    encoding="utf-8"
+                )
+
+                subprocess.run(["chmod", "+x", str(shellpth)])
+
+                permission = subprocess.run(["pkexec", str(shellpth)], capture_output = True, text = True)
+
+                if permission.returncode != 0:
+                    try:
+                        scriptpth.unlink()
+                    except FileNotFoundError:
+                        pass
+                    except PermissionError:
+                        pass
+                    self.setText("Update canceled :( Try again?")
+                    self.progress.hide()
+                    self.setEnabled(True)
+                    subprocess.Popen([str(dr() / "GamzScript")])
+                    return
+
             elif syst == "Darwin":
 
                 check = subprocess.run(
@@ -273,44 +338,30 @@ class updatebutton(QPushButton):
                     capture_output=True
                 )
 
-                script = f"""#!/bin/sh
-(
-sleep 5
+                template = dr().parent / "Resources" / "GamzyUpdate.sh.template"
 
-MOUNT="/tmp/GamzyUpdateMount"
+                if not template.exists():
+                    self.setText("Program error :( Please reinstall the program")
+                    self.progress.hide()
+                    self.setEnabled(True)
+                    subprocess.Popen([str(dr() / "GamzScript")])
+                    return
 
-mkdir -p "$MOUNT"
+                content = template.read_text(encoding="utf-8")
 
-if ! hdiutil attach "{updatepth()}" -mountpoint "$MOUNT" -nobrowse; then
-exit 1
-fi
+                content = content.replace(
+                    "upth",
+                    str(updatepth())
+                )
 
-rm -rf "/Applications/Gamzy.app"
-if ! cp -R "$MOUNT/Gamzy.app" "/Applications/Gamzy.app"; then
-hdiutil detach "$MOUNT"
-exit 1
-fi
-
-hdiutil detach "$MOUNT"
-
-rm -f "{updatepth()}"
-
-open "/Applications/Gamzy.app"
-
-) >/dev/null 2>&1 &
-
-exit 0
-"""
-                with open(shellpth, "w") as f:
-                    f.write(script)
+                shellpth.write_text(
+                    content,
+                    encoding="utf-8"
+                )
 
                 subprocess.run(["chmod", "+x", str(shellpth)])
 
-                applescript = '''
-on run argv
-do shell script quoted form of (item 1 of argv) with administrator privileges
-end run
-'''
+                applescript = (dr().parent / "Resources" / "adminpriv.applescript.template").read_text(encoding="utf-8")
 
                 permission = subprocess.run(
                     [
@@ -326,57 +377,6 @@ end run
                 if permission.returncode != 0:
                     try:
                         updatepth().unlink()
-                    except FileNotFoundError:
-                        pass
-                    except PermissionError:
-                        pass
-                    self.setText("Update canceled :( Try again?")
-                    self.progress.hide()
-                    self.setEnabled(True)
-                    subprocess.Popen([str(dr() / "GamzScript")])
-                    return
-
-            elif syst == "Linux":
-
-                subprocess.run(
-                    [
-                        "pkill",
-                        "-f",
-                        "GamzScript"
-                    ],
-                    capture_output=True
-                )
-
-                script = f"""#!/bin/sh
-sleep 2
-
-cd "{dr()}"
-
-mkdir -p .update
-
-tar -xzf update.tar.gz -C .update
-
-cp -rf .update/Gamzy/* .
-
-chmod +x Gamzy
-chmod +x GamzScript
-chmod +x "Create Shortcut.sh"
-
-rm update.tar.gz
-rm -rf .update
-
-exec ./Gamzy
-"""
-                with open(shellpth, "w") as f:
-                    f.write(script)
-
-                subprocess.run(["chmod", "+x", str(shellpth)])
-
-                permission = subprocess.run(["pkexec", str(shellpth)], capture_output = True, text = True)
-
-                if permission.returncode != 0:
-                    try:
-                        scriptpth.unlink()
                     except FileNotFoundError:
                         pass
                     except PermissionError:
@@ -550,15 +550,15 @@ class MainWindow(QMainWindow):
         chk.execute("SELECT platform, hide, silence FROM checks")
         rows = chk.fetchall()
 
-        if syst == "Darwin":
-            if not Path("/Applications/Gamzy.app").exists():
+        if syst != "Windows":
+            if syst == "Darwin" and not Path("/Applications/Gamzy.app").exists():
                 QMessageBox.critical(
                     None,
                     "Attention!",
                     "Move Gamzy into the Applications folder in order to function properly."
                 )
             self.biutuon = QPushButton()
-            self.biutuon.setIcon(QIcon(str(pathfind("uninstall.png"))))
+            self.biutuon.setIcon(QIcon(str(Path(sys.executable).parent.parent / "Resources" / "uninstall.png")))
             self.biutuon.setIconSize(QSize(36, 36))
             self.biutuon.setFixedSize(36, 36)
             self.biutuon.setStyleSheet("""
@@ -570,7 +570,7 @@ class MainWindow(QMainWindow):
             self.biutuon.clicked.connect(self.uninstallconfirm)
             delbut = QHBoxLayout()
             delbut.addWidget(self.biutuon)
-            delbut.setAlignment(Qt.AlignRight)
+            delbut.setAlignment(Qt.AlignLeft if syst == "Linux" else Qt.AlignRight)
             layout.addLayout(delbut)
 
         self.hidedropdown = QToolButton()
@@ -633,40 +633,45 @@ class MainWindow(QMainWindow):
 
     def uninstallconfirm(self):
 
-        if Path("/Applications/Gamzy.app").exists():
-
-            msg = QMessageBox(self)
-            msg.setWindowTitle("Uninstall Gamzy")
-            msg.setText("Do you want to uninstall Gamzy?")
-
-            yes = msg.addButton("Yes", QMessageBox.YesRole)
-            cancel = msg.addButton("Cancel", QMessageBox.NoRole)
-
-            msg.exec_()
-
-            if msg.clickedButton() == yes:
-                source = Path(sys.executable).parent.parent / "Resources" / "uninstall.sh"
-                uninstall = Path(tempfile.gettempdir()) / "gamzy-uninstall.sh"
-
-                try:
-                    uninstall.write_bytes(source.read_bytes())
-                    subprocess.run(["chmod", "+x", str(uninstall)], check=True)
-                    subprocess.Popen([str(uninstall)])
-                    QApplication.quit()
-                except Exception:
-                    QMessageBox.critical(
-                        self,
-                        "Uninstall failed",
-                        "Gamzy could not start the uninstall process. :("
-                    )
-
-        else:
-
+        if syst == "Darwin" and not Path("/Applications/Gamzy.app").exists():
             QMessageBox.information(
                 self,
                 "Function Denied",
                 "Gamzy needs to be in the Applications folder"
             )
+            return
+
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Uninstall Gamzy")
+        msg.setText("Do you want to uninstall Gamzy?")
+
+        yes = msg.addButton("Yes", QMessageBox.YesRole)
+        cancel = msg.addButton("Cancel", QMessageBox.NoRole)
+
+        msg.exec_()
+
+        if msg.clickedButton() == yes:
+            source = pathfind("linuxUninstall.sh") if syst == "Linux" else Path(sys.executable).parent.parent / "Resources" / "macUninstall.sh"
+            uninstall = Path(tempfile.gettempdir()) / "gamzy-uninstall.sh"
+
+            try:
+                content = source.read_text(encoding="utf-8")
+                if syst == "Linux":
+                    content = content.replace(
+                        "apth",
+                        str(dr())
+                    )
+                uninstall.write_text(content, encoding="utf-8")
+                subprocess.run(["chmod", "+x", str(uninstall)], check=True)
+                subprocess.Popen([str(uninstall)])
+                QApplication.quit()
+            except Exception:
+                QMessageBox.critical(
+                    self,
+                    "Uninstall failed",
+                    "Gamzy could not start the uninstall process. :("
+                )
+
 
     def createmenus(self):
 
@@ -810,7 +815,17 @@ class MainWindow(QMainWindow):
                             continue
                         tag_name = ver["tag_name"]
                         for asset in ver['assets']:
-                            if (syst == "Windows" and asset["name"].endswith(".exe")) or (syst == "Darwin" and asset["name"].endswith(".dmg")) or (syst == "Linux" and asset["name"].endswith(".tar.gz")):
+                            if (
+                                (
+                                    (syst == "Windows" and asset["name"].endswith(".exe"))
+                                    or
+                                    (syst == "Darwin" and asset["name"].endswith(".dmg"))
+                                    or
+                                    (syst == "Linux" and asset["name"].endswith(".tar.gz"))
+                                )
+                                and
+                                (archit in asset["name"])
+                            ):
                                 self.scrolyout.addWidget(updatebutton(self.basefont, tag_name))
                                 upstop = True
                                 break
@@ -1023,7 +1038,7 @@ class MainWindow(QMainWindow):
         row = safe.fetchone()
         if row:
             while not row[0]:
-                sleep(5)
+                sleep(10)
                 try:
                     safe.execute("SELECT safe FROM safety")
                     row = safe.fetchone()
