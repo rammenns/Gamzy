@@ -2,9 +2,9 @@ name: Build
 
 on:
   workflow_dispatch:
-#  push:
-#    branches:
-#      - main
+  push:
+    branches:
+      - main
 
 permissions:
   contents: write
@@ -14,7 +14,7 @@ jobs:
 
   # Windows x86-64
 
-  windows-x86_64:
+  Windows-x86_64:
     runs-on: windows-2025
 
     steps:
@@ -30,7 +30,6 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r libraries.txt
-          pip install pyinstaller
 
       - name: Building Executables
         run: |
@@ -51,7 +50,7 @@ jobs:
 
   # Windows ARM64
   
-  windows-ARM64:
+  Windows-ARM64:
     runs-on: windows-11-vs2026-arm
 
     steps:
@@ -67,7 +66,6 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r libraries.txt
-          pip install pyinstaller
 
       - name: Building Executables
         run: |
@@ -88,7 +86,7 @@ jobs:
 
   # Linux x86-64
   
-  linux-x86_64:
+  Linux-x86_64:
     runs-on: ubuntu-24.04
 
     steps:
@@ -104,7 +102,6 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r libraries.txt
-          pip install pyinstaller
 
       - name: Building Executables
         run: |
@@ -136,7 +133,7 @@ jobs:
 
   # Linux ARM64
   
-  linux-ARM64:
+  Linux-ARM64:
     runs-on: ubuntu-24.04-arm
 
     steps:
@@ -168,7 +165,6 @@ jobs:
           python -m pip install PyQt5 --no-build-isolation --config-settings --qmake=/usr/lib/qt5/bin/qmake --config-settings --confirm-license=
           sed '/^[[:space:]]*PyQt5[[:space:]]*$/d' libraries.txt > libraries-without-pyqt.txt
           python -m pip install -r libraries-without-pyqt.txt
-          python -m pip install pyinstaller
 
       - name: Building Executables
         run: |
@@ -196,3 +192,141 @@ jobs:
         run: |
           tag=$(gh release view --json tagName --jq .tagName)
           gh release upload "$tag" output/Gamzy-Linux-ARM64.tar.gz --clobber
+
+
+  # macOS x86-64
+
+  macOS-x86_64:
+    runs-on: macos-15-intel
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r libraries.txt
+          pip install pyobjc-framework-ServiceManagement
+
+      - name: Building Executables
+        run: |
+          pyinstaller --noconsole --add-data "gamzylogo.png:." --icon "gamzylogo.icns" --hidden-import=desktop_notifier.resources --osx-bundle-identifier "com.gamzy.GamzScript" --name GamzScript script.py
+          pyinstaller --noconsole --add-data "steamlogo.png:." --add-data "epiclogo.png:." --add-data "goglogo.png:." --add-data "itchlogo.png:." --add-data "ubilogo.png:." --add-data "Minecraftia-Regular.ttf:." --add-data "adminpriv.applescript.template:." --add-data "macGamzyUpdate.sh.template:." --icon "gamzylogo.icns" --osx-bundle-identifier "com.gamzy.Gamzy" --name Gamzy main.py
+
+      - name: Building Bundle
+        run: |
+          mkdir -p dist/Gamzy.app/Contents/Library/LaunchAgents
+
+          mv dist/GamzScript.app \
+            dist/Gamzy.app/Contents/Resources/GamzScript.app
+
+          /usr/libexec/PlistBuddy \
+            -c "Add :LSUIElement bool true" \
+            dist/Gamzy.app/Contents/Resources/GamzScript.app/Contents/Info.plist
+
+          cp "com.gamzy.GamzScript.plist" \
+            dist/Gamzy.app/Contents/Library/LaunchAgents/
+
+          cp "com.gamzy.GamzScript.legacy.plist" \
+            dist/Gamzy.app/Contents/Library/LaunchAgents/
+
+      - name: Code Signing
+        run: |
+          codesign --deep --force --sign - \
+            dist/Gamzy.app/Contents/Resources/GamzScript.app
+
+          codesign --deep --force --sign - \
+            dist/Gamzy.app
+
+      - name: Building DMG
+        run: |
+          mkdir -p output
+
+          hdiutil create \
+            -volname "Gamzy" \
+            -srcfolder "dist/Gamzy.app" \
+            -ov \
+            -format UDZO \
+            "output/Gamzy-macOS-x86_64.dmg"
+
+      - name: Uploading Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(gh release view --json tagName --jq .tagName)
+          gh release upload "$tag" output/Gamzy-macOS-x86_64.dmg --clobber
+
+
+  # macOS ARM64
+
+  macOS-ARM64:
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r libraries.txt
+          pip install pyobjc-framework-ServiceManagement
+
+      - name: Building Executables
+        run: |
+          pyinstaller --noconsole --add-data "gamzylogo.png:." --icon "gamzylogo.icns" --hidden-import=desktop_notifier.resources --osx-bundle-identifier "com.gamzy.GamzScript" --name GamzScript script.py
+          pyinstaller --noconsole --add-data "steamlogo.png:." --add-data "epiclogo.png:." --add-data "goglogo.png:." --add-data "itchlogo.png:." --add-data "ubilogo.png:." --add-data "Minecraftia-Regular.ttf:." --add-data "adminpriv.applescript.template:." --add-data "macGamzyUpdate.sh.template:." --icon "gamzylogo.icns" --osx-bundle-identifier "com.gamzy.Gamzy" --name Gamzy main.py
+
+      - name: Building Bundle
+        run: |
+          mkdir -p dist/Gamzy.app/Contents/Library/LaunchAgents
+
+          mv dist/GamzScript.app \
+            dist/Gamzy.app/Contents/Resources/GamzScript.app
+
+          /usr/libexec/PlistBuddy \
+            -c "Add :LSUIElement bool true" \
+            dist/Gamzy.app/Contents/Resources/GamzScript.app/Contents/Info.plist
+
+          cp "com.gamzy.GamzScript.plist" \
+            dist/Gamzy.app/Contents/Library/LaunchAgents/
+
+          cp "com.gamzy.GamzScript.legacy.plist" \
+            dist/Gamzy.app/Contents/Library/LaunchAgents/
+
+      - name: Code Signing
+        run: |
+          codesign --deep --force --sign - \
+            dist/Gamzy.app/Contents/Resources/GamzScript.app
+
+          codesign --deep --force --sign - \
+            dist/Gamzy.app
+
+      - name: Building DMG
+        run: |
+          mkdir -p output
+
+          hdiutil create \
+            -volname "Gamzy" \
+            -srcfolder "dist/Gamzy.app" \
+            -ov \
+            -format UDZO \
+            "output/Gamzy-macOS-ARM64.dmg"
+
+      - name: Uploading Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(gh release view --json tagName --jq .tagName)
+          gh release upload "$tag" output/Gamzy-macOS-ARM64.dmg --clobber
