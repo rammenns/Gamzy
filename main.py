@@ -1,15 +1,21 @@
+import platform
 import sys
+syst = platform.system()
+if syst == "Darwin":
+    macver = int(platform.mac_ver()[0].split(".")[0])
+    if macver >= 13:
+        from ServiceManagement import SMAppService, SMAppServiceStatusEnabled, SMAppServiceStatusRequiresApproval, SMAppServiceStatusNotRegistered, SMAppServiceStatusNotFound
+elif syst not in {"Windows", "Linux"}:
+    print(f"Unsupported operating system: {syst}")
+    sys.exit(1)
 import subprocess
 import psutil
 from socket import socket, AF_INET, SOCK_STREAM, error
 from PyQt5.QtWidgets import QApplication
 from UI import MainWindow
-import platform
 from pathlib import Path
 
-syst = platform.system()
 oneinstance = None
-
 
 def dr():
     if getattr(sys, "frozen", False):
@@ -18,6 +24,10 @@ def dr():
 
 
 def autostartx():
+
+    if not getattr(sys, "frozen", False):
+        return None if syst == "Linux" else False
+
     if syst == "Linux":
 
         script = dr() / "GamzScript"
@@ -48,51 +58,74 @@ def autostartx():
 
     elif syst == "Darwin":
 
-        if not Path("/Applications/Gamzy.app").exists():
+        if dr().parents[1] != Path("/Applications/Gamzy.app"):
             return False
 
-        uid = subprocess.check_output(["id", "-u"], text=True).strip()
-        service = f"gui/{uid}/com.gamzy.GamzScript"
+        if macver >= 13:
 
-        check = subprocess.run(
-            ["launchctl", "print", service],
-            capture_output=True
-        )
+            service = SMAppService.agentServiceWithPlistName_(
+                "com.gamzy.GamzScript.plist"
+            )
 
-        if check.returncode == 0:
+            if service.status == SMAppServiceStatusEnabled:
+                return True
+
+            elif service.status == SMAppServiceStatusRequiresApproval:
+                SMAppService.openSystemSettingsLoginItems()
+                return False
+
+            elif service.status == SMAppServiceStatusNotRegistered or service.status == SMAppServiceStatusNotFound:
+                try:
+                    success, error = service.registerAndReturnError_(None)
+                    return bool(success)
+                except Exception:
+                    return False
+
             return False
 
-        script = dr() / "GamzScript"
+        else:
 
-        if not script.exists():
-            return False
+            try:
+                launch_agents = Path.home() / "Library" / "LaunchAgents"
+                launch_agents.mkdir(parents=True, exist_ok=True)
 
-        launchagents = Path.home() / "Library" / "LaunchAgents"
-        launchagents.mkdir(parents=True, exist_ok=True)
+                legacy_source = (dr().parent / "Library" / "LaunchAgents" / "com.gamzy.GamzScript.legacy.plist")
 
-        source_plist = dr().parent / "Resources" / "com.gamzy.GamzScript.plist"
-        plist = launchagents / "com.gamzy.GamzScript.plist"
+                legacy_target = (launch_agents / "com.gamzy.GamzScript.plist")
 
-        try:
-            content = source_plist.read_text(encoding="utf-8")
-        except FileNotFoundError:
-            return False
+                if not legacy_source.exists():
+                    return False
 
-        content = content.replace(
-            "GamzScriptPTH",
-            str(script)
-        )
+                legacy_target.write_bytes(legacy_source.read_bytes())
 
-        plist.write_text(content, encoding="utf-8")
+                result = subprocess.run(
+                    [
+                        "/bin/launchctl",
+                        "load",
+                        "-w",
+                        str(legacy_target),
+                    ],
+                    capture_output=True,
+                    text=True,
+                )
 
-        hooray = subprocess.run([
-            "launchctl",
-            "bootstrap",
-            f"gui/{uid}",
-            str(plist)
-        ])
+                if result.returncode == 0:
+                    return True
 
-        return hooray.returncode == 0
+                check = subprocess.run(
+                    [
+                        "/bin/launchctl",
+                        "list",
+                        "com.gamzy.GamzScript",
+                    ],
+                    capture_output=True,
+                    text=True,
+                )
+
+                return check.returncode == 0
+
+            except Exception:
+                return False
 
     return None
 
@@ -138,8 +171,8 @@ def main():
             subprocess.Popen([str(dr() / gamzscript())])
 
     elif syst == "Darwin":
-        if not scriptrun() and not autostartx():
-            subprocess.Popen([str(dr() / gamzscript())])
+        if not autostartx() and not scriptrun():
+            subprocess.Popen([str(dr().parent / "Resources" / "GamzScript.app" / "Contents" / "MacOS" / gamzscript())]) if getattr(sys, "frozen", False) else subprocess.Popen([str(dr() / gamzscript())])
 
     sys.exit(app.exec_())
 
