@@ -1,3 +1,0 @@
-on run argv
-    do shell script quoted form of (item 1 of argv) with administrator privileges
-end run
