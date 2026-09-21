@@ -20,7 +20,7 @@ else:
 archit = platform.machine().lower()
 if archit == "amd64": archit = "x86_64"
 elif archit in ("aarch64", "arm64"): archit = "ARM64"
-from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy, QScrollArea, QPushButton, QProgressBar, QCheckBox, QToolButton, QMenu, QWidgetAction, QMessageBox
+from PyQt5.QtWidgets import QMainWindow, QLabel, QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy, QScrollArea, QPushButton, QProgressBar, QCheckBox, QToolButton, QMenu, QWidgetAction
 from PyQt5.QtGui import QIcon, QPixmap, QFontDatabase, QFont
 from PyQt5.QtCore import Qt, QTimer
 from webbrowser import open_new_tab
@@ -28,6 +28,7 @@ from requests import get
 import subprocess
 import tempfile
 from sqlite3 import connect
+from time import sleep
 
 def pathfind(f):
     if getattr(sys, "frozen", False):
@@ -64,6 +65,7 @@ class updatebutton(QPushButton):
     def __init__(self, font, newver):
         super().__init__()
 
+        self.newver = newver
         self.setObjectName("updatebutton")
         self.setText(f"Version {newver} available! Click to install.")
         self.setFixedHeight(120)
@@ -136,7 +138,7 @@ class updatebutton(QPushButton):
                 "Accept": "application/vnd.github+json",
                 "User-Agent": "Gamzy"
             }
-            url = get(f"https://api.github.com/repos/rammenns/Gamzy/releases/tags/{newver}", headers = headers, timeout = 5)
+            url = get(f"https://api.github.com/repos/rammenns/Gamzy/releases/tags/{self.newver}", headers = headers, timeout = 5)
             if url.status_code != 200:
                 self.setText("Connection lost :( Try again")
                 self.setEnabled(True)
@@ -245,7 +247,7 @@ class updatebutton(QPushButton):
                 permission = windll.shell32.ShellExecuteW(
                     None,
                     "runas",
-                    scriptpth,
+                    str(scriptpth),
                     "/SILENT /NORESTART",
                     None,
                     1
@@ -338,13 +340,13 @@ class updatebutton(QPushButton):
                     capture_output=True
                 )
 
-                template = dr().parent / "Resources" / "GamzyUpdate.sh.template"
+                template = dr().parent / "Resources" / "macGamzyUpdate.sh.template"
 
                 if not template.exists():
                     self.setText("Program error :( Please reinstall the program")
                     self.progress.hide()
                     self.setEnabled(True)
-                    subprocess.Popen([str(dr() / "GamzScript")])
+                    subprocess.Popen([str(dr().parent / "Resources" / "GamzScript.app" / "Contents" / "MacOS" / "GamzScript")])
                     return
 
                 content = template.read_text(encoding="utf-8")
@@ -384,7 +386,7 @@ class updatebutton(QPushButton):
                     self.setText("Update canceled :( Try again?")
                     self.progress.hide()
                     self.setEnabled(True)
-                    subprocess.Popen([str(dr() / "GamzScript")])
+                    subprocess.Popen([str(dr().parent / "Resources" / "GamzScript.app" / "Contents" / "MacOS" / "GamzScript")])
                     return
 
             QApplication.quit()
