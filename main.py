@@ -5,6 +5,14 @@ if syst == "Darwin":
     macver = int(platform.mac_ver()[0].split(".")[0])
     if macver >= 13:
         from ServiceManagement import SMAppService, SMAppServiceStatusEnabled, SMAppServiceStatusRequiresApproval, SMAppServiceStatusNotRegistered, SMAppServiceStatusNotFound
+        if "--unregister-gamzscript" in sys.argv:
+            service = SMAppService.agentServiceWithPlistName_(
+                "com.gamzy.GamzScript.plist"
+            )
+            success, error = service.unregisterAndReturnError_(None)
+            print("Unregister success:", success)
+            print("Unregister error:", error)
+            sys.exit(0)
 elif syst not in {"Windows", "Linux"}:
     print(f"Unsupported operating system: {syst}")
     sys.exit(1)
@@ -67,18 +75,32 @@ def autostartx():
                 "com.gamzy.GamzScript.plist"
             )
 
-            if service.status == SMAppServiceStatusEnabled:
+            status = service.status()
+
+            print("Launch Agent status:", status)
+            print("Launch Agent status type:", type(status))
+            try:
+                print("Launch Agent status int:", int(status))
+            except:
+                print("Launch Agent status int: FAILED")
+
+            if status == SMAppServiceStatusEnabled:
+                print("Launch Agent: ENABLED")
                 return True
 
-            elif service.status == SMAppServiceStatusRequiresApproval:
+            elif status == SMAppServiceStatusRequiresApproval:
+                print("Launch Agent: REQUIRES APPROVAL")
                 SMAppService.openSystemSettingsLoginItems()
                 return False
 
-            elif service.status == SMAppServiceStatusNotRegistered or service.status == SMAppServiceStatusNotFound:
+            elif status == SMAppServiceStatusNotRegistered or status == SMAppServiceStatusNotFound:
                 try:
                     success, error = service.registerAndReturnError_(None)
+                    print("Register success:", success)
+                    print("Register error:", error)
                     return bool(success)
-                except Exception:
+                except Exception as e:
+                    print("Register exception:", repr(e))
                     return False
 
             return False
@@ -175,7 +197,6 @@ def main():
             subprocess.Popen([str(dr().parent / "Resources" / "GamzScript.app" / "Contents" / "MacOS" / gamzscript())]) if getattr(sys, "frozen", False) else subprocess.Popen([str(dr() / gamzscript())])
 
     sys.exit(app.exec_())
-
 
 if __name__ == "__main__":
     main()
