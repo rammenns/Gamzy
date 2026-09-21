@@ -109,7 +109,7 @@ jobs:
       - name: Building Executables
         run: |
           pyinstaller --onefile --noconsole --add-data "gamzylogo.png:." --icon "gamzylogo.ico" --hidden-import=desktop_notifier.resources --name GamzScript script.py
-          pyinstaller --onefile --noconsole --add-data "gamzylogo.png:." --add-data "steamlogo.png:." --add-data "epiclogo.png:." --add-data "goglogo.png:." --add-data "itchlogo.png:." --add-data "ubilogo.png:." --add-data "uninstall.png:." --add-data "Minecraftia-Regular.ttf:." --add-data "linuxGamzyUpdate.sh.template:." --add-data "linuxUninstall.sh:." --add-data "GamzScript.desktop.template:." --icon "gamzylogo.ico" --name Gamzy main.py
+          pyinstaller --onefile --noconsole --add-data "gamzylogo.png:." --add-data "steamlogo.png:." --add-data "epiclogo.png:." --add-data "goglogo.png:." --add-data "itchlogo.png:." --add-data "ubilogo.png:." --add-data "Minecraftia-Regular.ttf:." --add-data "linuxGamzyUpdate.sh.template:." --add-data "GamzScript.desktop.template:." --icon "gamzylogo.ico" --name Gamzy main.py
 
       - name: Building Linux package
         run: |
@@ -173,7 +173,7 @@ jobs:
       - name: Building Executables
         run: |
           pyinstaller --onefile --noconsole --add-data "gamzylogo.png:." --icon "gamzylogo.ico" --hidden-import=desktop_notifier.resources --name GamzScript script.py
-          pyinstaller --onefile --noconsole --add-data "gamzylogo.png:." --add-data "steamlogo.png:." --add-data "epiclogo.png:." --add-data "goglogo.png:." --add-data "itchlogo.png:." --add-data "ubilogo.png:." --add-data "uninstall.png:." --add-data "Minecraftia-Regular.ttf:." --add-data "linuxGamzyUpdate.sh.template:." --add-data "linuxUninstall.sh:." --add-data "GamzScript.desktop.template:." --icon "gamzylogo.ico" --name Gamzy main.py
+          pyinstaller --onefile --noconsole --add-data "gamzylogo.png:." --add-data "steamlogo.png:." --add-data "epiclogo.png:." --add-data "goglogo.png:." --add-data "itchlogo.png:." --add-data "ubilogo.png:." --add-data "Minecraftia-Regular.ttf:." --add-data "linuxGamzyUpdate.sh.template:." --add-data "GamzScript.desktop.template:." --icon "gamzylogo.ico" --name Gamzy main.py
 
       - name: Building Linux package
         run: |
