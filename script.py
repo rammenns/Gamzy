@@ -11,10 +11,58 @@ from random import uniform
 from time import sleep
 from pathlib import Path
 from desktop_notifier import DesktopNotifier, Button
-from subprocess import Popen
+from subprocess import Popen, run
 import httpx
 import asyncio
 from requests import Session
+
+def deleteshit(connsafe, conntmr, conngmz):
+
+    for conn in (conngmz, conntmr, connsafe):
+        if conn is not None:
+            conn.close()
+
+    appdata = (Path.home() / "Library" / "Application Support" / "Gamzy")
+
+    if appdata.exists():
+
+        for item in appdata.iterdir():
+
+            if item.is_dir():
+
+                for subitem in sorted(item.rglob("*"), reverse=True):
+                    if subitem.is_file():
+                        subitem.unlink()
+                    elif subitem.is_dir():
+                        subitem.rmdir()
+
+                item.rmdir()
+
+            else:
+                item.unlink()
+
+        appdata.rmdir()
+
+    if int(platform.mac_ver()[0].split(".")[0]) >= 13:
+
+        run([str(Path.home() / ".Trash" / "Gamzy.app" / "Contents" / "MacOS" / "Gamzy"), "--unregister-gamzscript"])
+
+    else:
+
+        launch_agent = (Path.home() / "Library" / "LaunchAgents" / "com.gamzy.GamzScript.plist")
+
+        if launch_agent.exists():
+            run([
+                "/bin/launchctl",
+                "unload",
+                "-w",
+                str(launch_agent),
+            ])
+
+            launch_agent.unlink()
+
+    sys.exit(0)
+
 
 def resourcepth(name):
     if getattr(sys, "frozen", False):
@@ -705,6 +753,9 @@ def main():
 
                     if now >= row[0]:
                         break
+
+                    if syst == "Darwin" and (Path.home() / ".Trash" / "Gamzy.app").exists() and not Path("/Applications/Gamzy.app").exists():
+                        deleteshit(connsafe, conntmr, conngmz)
 
                     sleep(uniform(30, 60))
 
