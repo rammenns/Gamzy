@@ -552,29 +552,6 @@ class MainWindow(QMainWindow):
         chk.execute("SELECT platform, hide, silence FROM checks")
         rows = chk.fetchall()
 
-        if syst != "Windows":
-            if syst == "Darwin" and not Path("/Applications/Gamzy.app").exists():
-                QMessageBox.critical(
-                    None,
-                    "Attention!",
-                    "Move Gamzy into the Applications folder in order to function properly."
-                )
-            self.biutuon = QPushButton()
-            self.biutuon.setIcon(QIcon(str(Path(sys.executable).parent.parent / "Resources" / "uninstall.png")))
-            self.biutuon.setIconSize(QSize(36, 36))
-            self.biutuon.setFixedSize(36, 36)
-            self.biutuon.setStyleSheet("""
-                QPushButton {
-                    border: none;
-                    background: transparent;
-                }
-            """)
-            self.biutuon.clicked.connect(self.uninstallconfirm)
-            delbut = QHBoxLayout()
-            delbut.addWidget(self.biutuon)
-            delbut.setAlignment(Qt.AlignLeft if syst == "Linux" else Qt.AlignRight)
-            layout.addLayout(delbut)
-
         self.hidedropdown = QToolButton()
         self.hidedropdown.setText("Hide    >")
 
@@ -632,48 +609,6 @@ class MainWindow(QMainWindow):
         self.applyScale()
 
         scrollgamz.setStyleSheet("background-color: #424242;")
-
-    def uninstallconfirm(self):
-
-        if syst == "Darwin" and not Path("/Applications/Gamzy.app").exists():
-            QMessageBox.information(
-                self,
-                "Function Denied",
-                "Gamzy needs to be in the Applications folder"
-            )
-            return
-
-        msg = QMessageBox(self)
-        msg.setWindowTitle("Uninstall Gamzy")
-        msg.setText("Do you want to uninstall Gamzy?")
-
-        yes = msg.addButton("Yes", QMessageBox.YesRole)
-        cancel = msg.addButton("Cancel", QMessageBox.NoRole)
-
-        msg.exec_()
-
-        if msg.clickedButton() == yes:
-            source = pathfind("linuxUninstall.sh") if syst == "Linux" else Path(sys.executable).parent.parent / "Resources" / "macUninstall.sh"
-            uninstall = Path(tempfile.gettempdir()) / "gamzy-uninstall.sh"
-
-            try:
-                content = source.read_text(encoding="utf-8")
-                if syst == "Linux":
-                    content = content.replace(
-                        "apth",
-                        str(dr())
-                    )
-                uninstall.write_text(content, encoding="utf-8")
-                subprocess.run(["chmod", "+x", str(uninstall)], check=True)
-                subprocess.Popen([str(uninstall)])
-                QApplication.quit()
-            except Exception:
-                QMessageBox.critical(
-                    self,
-                    "Uninstall failed",
-                    "Gamzy could not start the uninstall process. :("
-                )
-
 
     def createmenus(self):
 
