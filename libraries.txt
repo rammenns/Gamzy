@@ -4,3 +4,4 @@ beautifulsoup4
 desktop-notifier
 httpx
 psutil
+pyinstaller
